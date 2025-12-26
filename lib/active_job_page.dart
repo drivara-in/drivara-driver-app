@@ -285,61 +285,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
               ),
             ),
 
-            // 3. Header Content (Floating)
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Image.asset('assets/images/drivara-icon.png', height: 40, color: AppColors.primary),
-                          const SizedBox(width: 8),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text("Drivara", style: AppTextStyles.header.copyWith(fontSize: 18, height: 1, color: Theme.of(context).textTheme.bodyLarge?.color)),
-                              Text("DRIVER", style: AppTextStyles.label.copyWith(fontSize: 10, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6), letterSpacing: 2)),
-                            ],
-                          )
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.palette),
-                            color: Theme.of(context).iconTheme.color,
-                            onPressed: () => _showThemeSheet(context),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.language),
-                            color: Theme.of(context).iconTheme.color,
-                            onPressed: () => _showLanguageSheet(context, t),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.logout),
-                            color: Theme.of(context).iconTheme.color,
-                            onPressed: () async {
-                               await ApiConfig.logout();
-                               if (!mounted) return;
-                               Navigator.of(context).pushAndRemoveUntil(
-                                  MaterialPageRoute(builder: (_) => const LoginPage()), 
-                                  (route) => false
-                               );
-                            }, 
-                          )
-                        ],
-                      )
-                    ],
-                  ),
-                ),
-              ),
-            ),
+
 
             // 4. Draggable/Scrollable Content Sheet
             Positioned.fill(
@@ -561,6 +507,62 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                       ),
                     ),
                   ],
+                ),
+              ),
+            ),
+
+            // 3. Header Content (Floating) - Moved to bottom to be on top of Sheet (z-index)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Image.asset('assets/images/drivara-icon.png', height: 40, color: AppColors.primary),
+                          const SizedBox(width: 8),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text("Drivara", style: AppTextStyles.header.copyWith(fontSize: 18, height: 1, color: Theme.of(context).textTheme.bodyLarge?.color)),
+                              Text("DRIVER", style: AppTextStyles.label.copyWith(fontSize: 10, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6), letterSpacing: 2)),
+                            ],
+                          )
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.palette),
+                            color: Theme.of(context).iconTheme.color,
+                            onPressed: () => _showThemeSheet(context),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.language),
+                            color: Theme.of(context).iconTheme.color,
+                            onPressed: () => _showLanguageSheet(context, t),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.logout),
+                            color: Theme.of(context).iconTheme.color,
+                            onPressed: () async {
+                               await ApiConfig.logout();
+                               if (!mounted) return;
+                               Navigator.of(context).pushAndRemoveUntil(
+                                  MaterialPageRoute(builder: (_) => const LoginPage()), 
+                                  (route) => false
+                               );
+                            }, 
+                          )
+                        ],
+                      )
+                    ],
+                  ),
                 ),
               ),
             ),
