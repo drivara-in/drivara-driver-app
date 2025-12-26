@@ -1,0 +1,76 @@
+plugins {
+    id("com.android.application")
+    id("kotlin-android")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+import java.util.Properties
+import java.io.FileInputStream
+
+android {
+    namespace = "com.drivara.drivara_driver_android"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_17.toString()
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.drivara.drivara_driver_android"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+
+        // Read .env for Secrets
+        val possibleEnvFiles = listOf(
+            rootProject.file("../.env"),        // From android/app
+            rootProject.file("../../.env"),     // From android/app/src/main
+            File("/Users/rishi/Documents/drivara-driver-app/.env"), // Absolute path (fallback)
+            File(System.getProperty("user.dir"), ".env") 
+        )
+        
+        var mapsApiKey = ""
+        for (f in possibleEnvFiles) {
+             println("Checking environment file: ${f.absolutePath} (Exists: ${f.exists()})")
+             if (f.exists()) {
+                 val props = Properties()
+                 props.load(FileInputStream(f))
+                 val rawKey = props.getProperty("GOOGLE_MAPS_API_KEY")
+                 if (rawKey != null && rawKey.isNotBlank()) {
+                     mapsApiKey = rawKey.trim()
+                     println("SUCCESS: Loaded GOOGLE_MAPS_API_KEY from ${f.absolutePath}")
+                     break
+                 }
+             }
+        }
+        
+        if (mapsApiKey.isEmpty()) {
+            throw GradleException("CRITICAL: GOOGLE_MAPS_API_KEY not found in any .env file. Checked locations: ${possibleEnvFiles.map { it.absolutePath }}")
+        }
+
+        manifestPlaceholders["mapsApiKey"] = mapsApiKey
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}

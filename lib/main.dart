@@ -1,0 +1,85 @@
+
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'login_page.dart';
+import 'permissions_page.dart';
+import 'home_page.dart';
+import 'api_config.dart';
+import 'providers/localization_provider.dart';
+import 'active_job_page.dart';
+import 'no_job_page.dart';
+import 'theme/app_theme.dart';
+import 'providers/theme_provider.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final token = await ApiConfig.getAuthToken();
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => LocalizationProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+      ],
+      child: DrivaraApp(initialRoute: token != null ? '/home' : '/login'),
+    ),
+  );
+}
+
+class DrivaraApp extends StatelessWidget {
+  final String initialRoute;
+  const DrivaraApp({super.key, required this.initialRoute});
+
+  @override
+  Widget build(BuildContext context) {
+    // Watch ThemeProvider to rebuild when theme changes manually
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    
+    return MaterialApp(
+      title: 'Drivara Driver',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: themeProvider.themeMode,
+      initialRoute: initialRoute,
+      routes: {
+        '/login': (context) => const LoginPage(),
+        '/permissions': (context) => const PermissionsPage(),
+        '/home': (context) => const HomeRedirector(),
+      },
+    );
+  }
+}
+
+class HomeRedirector extends StatefulWidget {
+  const HomeRedirector({super.key});
+
+  @override
+  State<HomeRedirector> createState() => _HomeRedirectorState();
+}
+
+class _HomeRedirectorState extends State<HomeRedirector> {
+  @override
+  void initState() {
+    super.initState();
+    _checkJob();
+  }
+
+  Future<void> _checkJob() async {
+    try {
+      final response = await ApiConfig.dio.get('/driver/me/active-job');
+      final activeJob = response.data['activeJob'];
+      if (!mounted) return;
+      if (activeJob != null) {
+        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => ActiveJobPage(job: activeJob)));
+      } else {
+        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const NoJobPage()));
+      }
+    } catch (e) {
+      if (mounted) Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const NoJobPage()));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => const Scaffold(body: Center(child: CircularProgressIndicator()));
+}
