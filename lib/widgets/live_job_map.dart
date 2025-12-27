@@ -4,6 +4,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'dart:async';
 import 'dart:math' as math;
 import '../utils/marker_generator.dart';
+import '../utils/map_styles.dart';
 
 class LiveJobMap extends StatefulWidget {
   final Map<String, dynamic> job;
@@ -40,20 +41,24 @@ class _LiveJobMapState extends State<LiveJobMap> {
   @override
   void initState() {
     super.initState();
-    _loadAssets();
+    // Do not load assets here, wait for context for theme
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _loadMapStyle();
+    _loadAssets(); // Regenerate marker based on new theme
     _parseJobData();
   }
 
 
   Future<void> _loadAssets() async {
     try {
-        final icon = await MarkerGenerator.createCustom3DMarker();
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        debugPrint("Loading assets... Dark Mode: $isDark");
+        final icon = await MarkerGenerator.createCustom3DMarker(isDark: isDark);
+        debugPrint("Asset loaded. Icon size (bytes): ${icon.toJson().toString().length}");
         if (mounted) {
             setState(() {
                 _vehicleIcon = icon;
@@ -87,7 +92,7 @@ class _LiveJobMapState extends State<LiveJobMap> {
        // Ideally load proper JSON styles. 
        // For 3D effect, clean styles without too many labels work best.
       if (isDark) {
-         // _mapStyle = ...
+         _mapStyle = MapStyles.dark;
       } else {
          _mapStyle = null; 
       }

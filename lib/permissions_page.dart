@@ -92,7 +92,7 @@ class _PermissionsPageState extends State<PermissionsPage> {
   Widget build(BuildContext context) {
     final t = Provider.of<LocalizationProvider>(context);
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -104,7 +104,7 @@ class _PermissionsPageState extends State<PermissionsPage> {
                 style: GoogleFonts.outfit(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: Theme.of(context).textTheme.bodyLarge?.color,
                 ),
               ).animate().fadeIn().slideY(begin: -0.2, end: 0),
               
@@ -113,7 +113,7 @@ class _PermissionsPageState extends State<PermissionsPage> {
                 t.t('permissions_subtitle'),
                 style: GoogleFonts.inter(
                   fontSize: 16,
-                  color: Colors.white70,
+                  color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
                 ),
               ).animate().fadeIn(delay: 200.ms),
 
@@ -162,8 +162,8 @@ class _PermissionsPageState extends State<PermissionsPage> {
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _requestAllPermissions,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
+                    backgroundColor: Theme.of(context).cardTheme.color,
+                    foregroundColor: Theme.of(context).textTheme.bodyLarge?.color,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
@@ -216,12 +216,12 @@ class _PermissionItem extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: isGranted ? Colors.green.withOpacity(0.2) : Colors.white.withOpacity(0.1),
+              color: isGranted ? Colors.green.withOpacity(0.2) : Theme.of(context).dividerColor.withOpacity(0.3),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
               isGranted ? Icons.check : icon,
-              color: isGranted ? Colors.green : Colors.white,
+              color: isGranted ? Colors.green : Theme.of(context).iconTheme.color,
               size: 24,
             ),
           ),
@@ -235,7 +235,7 @@ class _PermissionItem extends StatelessWidget {
                   style: GoogleFonts.outfit(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    color: Theme.of(context).textTheme.bodyLarge?.color,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -243,7 +243,7 @@ class _PermissionItem extends StatelessWidget {
                   description,
                   style: GoogleFonts.inter(
                     fontSize: 14,
-                    color: Colors.white60,
+                    color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6),
                     height: 1.4,
                   ),
                 ),

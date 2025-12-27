@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import 'dart:async';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:dio/dio.dart';
 import 'package:provider/provider.dart';
@@ -12,6 +13,7 @@ import 'no_job_page.dart';
 import 'login_page.dart';
 import 'theme/app_theme.dart';
 import 'providers/theme_provider.dart';
+import 'services/job_stream_service.dart';
 
 class ActiveJobPage extends StatefulWidget {
   final Map<String, dynamic> job;
@@ -27,11 +29,66 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
   bool _isLoading = false;
   bool _isActionLoading = false;
 
+  JobStreamService? _streamService;
+  StreamSubscription? _streamSubscription;
+
   @override
   void initState() {
     super.initState();
     _job = widget.job;
-    _fetchDashboardData();
+    // Initial fetch for loading state
+    _fetchDashboardData().then((_) {
+       _connectStream();
+    });
+  }
+
+  @override
+  void dispose() {
+    _streamSubscription?.cancel();
+    _streamService?.dispose();
+    super.dispose();
+  }
+
+  void _connectStream() {
+    _streamService = JobStreamService(jobId: _job['id']);
+    _streamSubscription = _streamService!.connect().listen((data) {
+        if (!mounted) return;
+        setState(() {
+           // Merge stream data into dashboard data structure
+           // The stream payload is flat, but dashboard expects nested structure.
+           // We reconstruct it to match build() expectations.
+           
+           final vehicle = _dashboardData?['vehicle'] ?? {};
+           vehicle['location'] = {
+              'lat': data['lat'] ?? 0,
+              'lng': data['lng'] ?? 0,
+              'heading': data['heading'] ?? 0
+           };
+           vehicle['speed_kmh'] = data['speed'] ?? 0;
+           vehicle['odometer_km'] = data['odometer'] ?? vehicle['odometer_km'];
+           vehicle['fuel_level_percent'] = data['fuel_level'] ?? vehicle['fuel_level_percent']; // New from stream
+           vehicle['def_level_percent'] = data['def_level'] ?? vehicle['def_level_percent'];   // New from stream
+           
+           final balances = _dashboardData?['balances'] ?? {};
+           if (data['fuel_wallet_balance'] != null) balances['fuel'] = data['fuel_wallet_balance'];
+           if (data['fastag_wallet_balance'] != null) balances['fastag'] = data['fastag_wallet_balance'];
+
+           final route = _dashboardData?['route'] ?? {};
+           // If we have distance left, update it
+           if (data['distanceLeftKm'] != null) {
+              route['distance_remaining_km'] = data['distanceLeftKm'];
+              // Simple ETA recalc if needed or trust server stream eventually
+           }
+
+           // Re-assign to trigger UI update
+           _dashboardData = {
+              'job': _job, // static for now
+              'vehicle': vehicle,
+              'balances': balances,
+              'route': route, 
+           };
+        });
+    });
   }
 
   Future<void> _fetchDashboardData() async {
@@ -41,7 +98,6 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
       if (!mounted) return;
       setState(() {
         _dashboardData = response.data;
-        // Update job details from dashboard if newer
         if (_dashboardData?['job'] != null) {
             _job = _dashboardData!['job'];
         }
@@ -104,7 +160,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
   }
 
   Widget _buildThemeOption(ThemeProvider provider, String label, ThemeMode mode, IconData icon) {
-    final isSelected = provider.themeMode == mode;
+    final isSelected = provider.preference == mode;
     return InkWell(
       onTap: () {
         provider.setThemeMode(mode);
@@ -131,7 +187,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
   void _showLanguageSheet(BuildContext context, LocalizationProvider t) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.card,
+      backgroundColor: Theme.of(context).cardTheme.color,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) {
         return Container(
@@ -140,7 +196,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(t.t('select_language'), style: AppTextStyles.header.copyWith(fontSize: 20)),
+              Text(t.t('select_language'), style: AppTextStyles.header.copyWith(fontSize: 20, color: Theme.of(context).textTheme.bodyLarge?.color)),
               const SizedBox(height: 16),
               _buildLanguageOption(t, 'English', const Locale('en', 'US')),
               _buildLanguageOption(t, 'हिन्दी', const Locale('hi')),
@@ -424,7 +480,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                                        RouteTimelineWidget(
                                            progress: progress, 
                                            activeColor: AppColors.primary,
-                                           inactiveColor: Colors.grey.shade300,
+                                           inactiveColor: Theme.of(context).dividerColor,
                                        ),
                                        
                                        const SizedBox(height: 10),
@@ -607,7 +663,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
         width: 140, // Fixed width for stability
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.background,
+          color: Theme.of(context).cardTheme.color,
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4)),
@@ -657,7 +713,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                             style: GoogleFonts.outfit(
                               fontSize: 28, // Bigger
                               fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                              color: Theme.of(context).textTheme.bodyLarge?.color,
                               height: 1.0
                             ),
                           ),
@@ -665,7 +721,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                             t.t('liters'),
                             style: GoogleFonts.inter(
                               fontSize: 10,
-                              color: Colors.white54,
+                              color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5),
                               fontWeight: FontWeight.w500,
                               height: 1.0
                             ),
@@ -678,7 +734,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                             style: GoogleFonts.outfit(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                              color: Theme.of(context).textTheme.bodyLarge?.color,
                             ),
                            ),
                         ]

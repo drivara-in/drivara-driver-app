@@ -112,12 +112,12 @@ class _OtpPageState extends State<OtpPage> {
   Widget build(BuildContext context) {
     final t = Provider.of<LocalizationProvider>(context);
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+          icon: Icon(Icons.arrow_back, color: Theme.of(context).iconTheme.color),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
@@ -130,13 +130,13 @@ class _OtpPageState extends State<OtpPage> {
               alignment: Alignment.centerLeft,
               child: Row(
                 children: [
-                   Image.asset('assets/images/drivara-icon.png', height: 72, color: Colors.white),
+                    Image.asset('assets/images/drivara-icon.png', height: 72, color: Theme.of(context).primaryColor),
                    const SizedBox(width: 12),
                    Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text("Drivara", style: AppTextStyles.header.copyWith(fontSize: 32, height: 1)),
-                      Text("DRIVER", style: AppTextStyles.label.copyWith(fontSize: 14, color: AppColors.textTertiary, letterSpacing: 4)),
+                      Text("Drivara", style: AppTextStyles.header.copyWith(fontSize: 32, height: 1, color: Theme.of(context).textTheme.bodyLarge?.color)),
+                      Text("DRIVER", style: AppTextStyles.label.copyWith(fontSize: 14, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6), letterSpacing: 4)),
                     ],
                    )
                 ],
@@ -145,12 +145,15 @@ class _OtpPageState extends State<OtpPage> {
             const SizedBox(height: 32),
             Text(
               t.t('enter_otp'),
-              style: AppTextStyles.header.copyWith(fontSize: 32),
+              style: AppTextStyles.header.copyWith(
+                fontSize: 32, 
+                color: Theme.of(context).textTheme.bodyLarge?.color,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Sent to \${widget.phone}',
-              style: AppTextStyles.body,
+              'Sent to ${widget.phone}',
+              style: AppTextStyles.body.copyWith(color: Theme.of(context).textTheme.bodyMedium?.color),
             ),
             const SizedBox(height: 48),
 
@@ -161,32 +164,32 @@ class _OtpPageState extends State<OtpPage> {
               defaultPinTheme: PinTheme(
                 width: 56,
                 height: 56,
-                textStyle: AppTextStyles.header.copyWith(fontSize: 24, color: Colors.white),
+                textStyle: AppTextStyles.header.copyWith(fontSize: 24, color: Theme.of(context).textTheme.bodyLarge?.color),
                 decoration: BoxDecoration(
-                  color: AppColors.card,
+                  color: Theme.of(context).cardTheme.color,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.cardBorder),
+                  border: Border.all(color: Theme.of(context).dividerColor),
                 ),
               ),
               focusedPinTheme: PinTheme(
                 width: 56,
                 height: 56,
-                textStyle: AppTextStyles.header.copyWith(fontSize: 24, color: AppColors.primary),
+                textStyle: AppTextStyles.header.copyWith(fontSize: 24, color: Theme.of(context).primaryColor),
                 decoration: BoxDecoration(
-                  color: AppColors.card,
+                  color: Theme.of(context).cardTheme.color,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.primary),
-                  boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 8)]
+                  border: Border.all(color: Theme.of(context).primaryColor),
+                  boxShadow: [BoxShadow(color: Theme.of(context).primaryColor.withOpacity(0.3), blurRadius: 8)]
                 ),
               ),
               errorPinTheme: PinTheme(
                 width: 56,
                 height: 56,
-                textStyle: AppTextStyles.header.copyWith(fontSize: 24, color: AppColors.error),
+                textStyle: AppTextStyles.header.copyWith(fontSize: 24, color: Theme.of(context).colorScheme.error),
                 decoration: BoxDecoration(
-                  color: AppColors.card,
+                  color: Theme.of(context).cardTheme.color,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.error),
+                  border: Border.all(color: Theme.of(context).colorScheme.error),
                 ),
               ),
               onCompleted: (pin) => _verifyOtp(),
@@ -195,7 +198,7 @@ class _OtpPageState extends State<OtpPage> {
             
             if (_error != null) ...[
               const SizedBox(height: 16),
-              Text(_error!, style: AppTextStyles.body.copyWith(color: AppColors.error)),
+              Text(_error!, style: AppTextStyles.body.copyWith(color: Theme.of(context).colorScheme.error)),
             ],
 
             const Spacer(),
@@ -205,7 +208,7 @@ class _OtpPageState extends State<OtpPage> {
               height: 56,
               child: ElevatedButton(
                 onPressed: _isLoading ? null : _verifyOtp,
-                style: AppTheme.darkTheme.elevatedButtonTheme.style!.copyWith(
+                style: Theme.of(context).elevatedButtonTheme.style?.copyWith(
                     backgroundColor: MaterialStateProperty.all(AppColors.success)
                 ),
                 child: _isLoading 

@@ -57,11 +57,11 @@ class AppTheme {
     ),
     
     // Card Theme
-    cardTheme: const CardTheme(
+    cardTheme: const CardThemeData(
       color: AppColors.cardLight,
       elevation: 0,
       margin: EdgeInsets.zero,
-    ).data,
+    ),
 
     // Input Theme
     inputDecorationTheme: InputDecorationTheme(
@@ -122,11 +122,11 @@ class AppTheme {
     primaryColor: AppColors.primary,
     
     // Card Theme
-    cardTheme: const CardTheme(
+    cardTheme: const CardThemeData(
       color: AppColors.card,
       elevation: 0,
       margin: EdgeInsets.zero,
-    ).data,
+    ),
 
 
     // Input Theme
