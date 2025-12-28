@@ -130,7 +130,7 @@ class _OtpPageState extends State<OtpPage> {
               alignment: Alignment.centerLeft,
               child: Row(
                 children: [
-                    Image.asset('assets/images/drivara-icon.png', height: 72, color: Theme.of(context).primaryColor),
+                    Image.asset('assets/images/drivara-icon.png', height: 72),
                    const SizedBox(width: 12),
                    Column(
                     crossAxisAlignment: CrossAxisAlignment.end,

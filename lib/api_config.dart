@@ -1,17 +1,17 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiConfig {
-  // Use 10.0.2.2 for Android Emulator, or your machine's IP for physical device
-  // Since user is testing on physical device, we likely need the machine IP.
-  // For now, I'll use a placeholder or the likely local IP if known, but 
-  // often it's best to ask or use a known dev server.
-  // Given previous logs, user might be on same network.
-  // I'll default to a generic IP placeholder that the user might need to change,
-  // or use the machine's likely IP if I can infer it.
-  // The backend says "Server listening on http://localhost:8080".
-  // Android device needs the Mac's IP.
-  static const String baseUrl = 'http://192.168.1.4:8080/api'; 
+  // Read API base URL from .env file, fallback to localhost for emulator
+  static String get baseUrl {
+    final envUrl = dotenv.env['API_BASE_URL'];
+    if (envUrl != null && envUrl.isNotEmpty) {
+      return '$envUrl/api';
+    }
+    // Fallback to localhost (works for emulator)
+    return 'http://localhost:8080/api';
+  } 
 
   static final Dio _dio = Dio(BaseOptions(
     baseUrl: baseUrl,

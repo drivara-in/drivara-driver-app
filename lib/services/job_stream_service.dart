@@ -25,7 +25,8 @@ class JobStreamService {
     
     _client = http.Client();
     final token = await ApiConfig.getAuthToken();
-    final url = Uri.parse('${ApiConfig.baseUrl}/jobs/$jobId/tracking/stream');
+    // Use the driver-specific streaming endpoint
+    final url = Uri.parse('${ApiConfig.baseUrl}/driver/jobs/$jobId/tracking/stream');
 
     try {
       debugPrint("Connecting to stream: $url");

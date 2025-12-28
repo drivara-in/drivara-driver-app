@@ -12,8 +12,20 @@ import 'no_job_page.dart';
 import 'theme/app_theme.dart';
 import 'providers/theme_provider.dart';
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:intl/date_symbol_data_local.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    debugPrint("Failed to load .env: $e");
+    // Continue anyway, maybe connection string is hardcoded or not critical immediately
+  }
+  
+  await initializeDateFormatting();
+
   final token = await ApiConfig.getAuthToken();
   runApp(
     MultiProvider(
@@ -67,6 +79,13 @@ class _HomeRedirectorState extends State<HomeRedirector> {
 
   Future<void> _checkJob() async {
     try {
+      // Re-verify token presence/header setting just to be safe
+      final token = await ApiConfig.getAuthToken();
+      if (token == null) {
+          if (mounted) Navigator.of(context).pushReplacementNamed('/login');
+          return;
+      }
+      
       final response = await ApiConfig.dio.get('/driver/me/active-job');
       final activeJob = response.data['activeJob'];
       if (!mounted) return;
@@ -76,6 +95,7 @@ class _HomeRedirectorState extends State<HomeRedirector> {
         Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const NoJobPage()));
       }
     } catch (e) {
+      debugPrint("Check Job Failed: $e");
       if (mounted) Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const NoJobPage()));
     }
   }

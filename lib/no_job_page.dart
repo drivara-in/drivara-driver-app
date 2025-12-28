@@ -22,7 +22,7 @@ class NoJobPage extends StatelessWidget {
             children: [
               Opacity(
                 opacity: 0.8, 
-                child: Image.asset('assets/images/drivara-icon.png', height: 80, color: Colors.white),
+                child: Image.asset('assets/images/drivara-icon.png', height: 80),
               ),
               const SizedBox(height: 32),
               Text(

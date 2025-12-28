@@ -3,6 +3,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:provider/provider.dart';
+import '../providers/localization_provider.dart';
 import '../utils/marker_generator.dart';
 import '../utils/map_styles.dart';
 
@@ -14,7 +16,12 @@ class LiveJobMap extends StatefulWidget {
     super.key,
     required this.job,
     required this.vehicle,
+    this.fuelStations,
+    this.onFuelStationTap,
   });
+
+  final List<Map<String, dynamic>>? fuelStations;
+  final Function(Map<String, dynamic>)? onFuelStationTap;
 
   @override
   State<LiveJobMap> createState() => _LiveJobMapState();
@@ -32,6 +39,11 @@ class _LiveJobMapState extends State<LiveJobMap> {
   LatLng? _lastVehiclePos;
   double _lastHeading = 0.0;
   bool _isCameraInitialized = false;
+
+  // Navigation Override State
+  LatLng? _overrideDestPos;
+  String? _overrideDestName;
+  List<LatLng>? _overrideRouteCurve;
 
   static const CameraPosition _kGooglePlex = CameraPosition(
     target: LatLng(20.5937, 78.9629), // India center
@@ -79,33 +91,39 @@ class _LiveJobMapState extends State<LiveJobMap> {
   @override
   void didUpdateWidget(LiveJobMap oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.job != oldWidget.job || widget.vehicle != oldWidget.vehicle) {
-      _parseJobData();
+    
+    bool fuelChanged = widget.fuelStations != oldWidget.fuelStations;
+    
+    if (widget.job != oldWidget.job || 
+        widget.vehicle != oldWidget.vehicle || 
+        fuelChanged) {
+      _parseJobData(refitBounds: fuelChanged);
     }
     _loadMapStyle();
   }
 
   Future<void> _loadMapStyle() async {
-    // Basic dark/light style logic
     bool isDark = Theme.of(context).brightness == Brightness.dark;
     try {
-       // Ideally load proper JSON styles. 
-       // For 3D effect, clean styles without too many labels work best.
       if (isDark) {
          _mapStyle = MapStyles.dark;
       } else {
          _mapStyle = null; 
       }
       
-      final controller = await _controller.future;
-      controller.setMapStyle(_mapStyle);
-      
+      // If controller is available, set style. 
+      // Note: _controller.future might not be complete yet during init.
+      // But _onMapCreated handles initial style. This is for theme changes.
+      if (_controller.isCompleted) {
+        final controller = await _controller.future;
+        controller.setMapStyle(_mapStyle);
+      }
     } catch (e) {
       debugPrint("Error loading map style: $e");
     }
   }
 
-  void _parseJobData() {
+  void _parseJobData({bool refitBounds = false}) {
     final markers = <Marker>{};
     final polylines = <Polyline>{};
 
@@ -118,12 +136,10 @@ class _LiveJobMapState extends State<LiveJobMap> {
       final lng = double.tryParse(widget.vehicle['location']['lng'].toString());
       if (lat != null && lng != null) {
         vehiclePos = LatLng(lat, lng);
-        // Check both top-level and nested 'location' for heading
         heading = double.tryParse(widget.vehicle['heading']?.toString() ?? '') ?? 
                   double.tryParse(widget.vehicle['location']?['heading']?.toString() ?? '') ?? 
                   0.0;
         
-        // Only add marker if custom icon is ready to avoid showing default pin
         if (_vehicleIcon != null) {
           markers.add(Marker(
             markerId: const MarkerId('vehicle'),
@@ -137,68 +153,220 @@ class _LiveJobMapState extends State<LiveJobMap> {
           ));
         }
         
-        _updateCamera(vehiclePos, heading);
+        // If we Just cleared fuel stations (refit=true but no stations), force snap back
+        bool stationsCleared = refitBounds && (widget.fuelStations == null || widget.fuelStations!.isEmpty);
+        _updateCamera(vehiclePos, heading, force: stationsCleared);
       }
     }
 
-    // 2. Parse Destination
+    // ... (Destination Parsing stays same) ...
+    // 2. Parse Destination (Check Override first)
     LatLng? destPos;
-    final dLat = double.tryParse(widget.job['destination_latitude'].toString());
-    final dLng = double.tryParse(widget.job['destination_longitude'].toString());
-    if (dLat != null && dLng != null) {
-      destPos = LatLng(dLat, dLng);
-      markers.add(Marker(
-        markerId: const MarkerId('destination'),
-        position: destPos,
-        icon: _destinationIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-        infoWindow: InfoWindow(title: widget.job['destination'] ?? "Drop Location"),
-      ));
+    
+    if (_overrideDestPos != null) {
+        // Use Override
+        destPos = _overrideDestPos;
+        markers.add(Marker(
+          markerId: const MarkerId('destination'),
+          position: destPos!,
+          icon: _destinationIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed), 
+          infoWindow: InfoWindow(title: _overrideDestName ?? "Destination", snippet: "Navigating here"),
+        ));
+    } else {
+        // Use Job Destination
+        final dLat = double.tryParse(widget.job['destination_latitude'].toString());
+        final dLng = double.tryParse(widget.job['destination_longitude'].toString());
+        if (dLat != null && dLng != null) {
+          destPos = LatLng(dLat, dLng);
+          markers.add(Marker(
+            markerId: const MarkerId('destination'),
+            position: destPos,
+            icon: _destinationIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+            infoWindow: InfoWindow(title: widget.job['destination'] ?? "Drop Location"),
+          ));
+        }
     }
 
-    // 3. Polyline (Disabled as per user request to remove "the line that connects")
-    /*
+    // 3. Polyline
     if (vehiclePos != null && destPos != null) {
-      polylines.add(Polyline(
-        polylineId: const PolylineId('route'),
-        points: [vehiclePos, destPos],
-        color: Theme.of(context).primaryColor,
-        width: 5,
-        jointType: JointType.round,
-        startCap: Cap.roundCap,
-        endCap: Cap.buttCap,
-      ));
+      if (_overrideRouteCurve != null && _overrideRouteCurve!.isNotEmpty) {
+           polylines.add(Polyline(
+            polylineId: const PolylineId('route'),
+            points: _overrideRouteCurve!,
+            color: Theme.of(context).primaryColor,
+            width: 5,
+            jointType: JointType.round,
+            startCap: Cap.roundCap,
+            endCap: Cap.buttCap,
+         ));
+      } 
     }
-    */
+
+    // 4. Fuel Stations
+    List<LatLng> fuelPositions = [];
+    if (widget.fuelStations != null) {
+      for (var currStation in widget.fuelStations!) {
+        final lat = double.tryParse(currStation['lat'].toString());
+        final lng = double.tryParse(currStation['lng'].toString());
+        
+        if (lat != null && lng != null) {
+           final pos = LatLng(lat, lng);
+           fuelPositions.add(pos);
+           
+           markers.add(Marker(
+             markerId: MarkerId('station_${currStation['place_id']}'),
+             position: pos,
+             icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueYellow), 
+             infoWindow: InfoWindow(
+               title: currStation['name'],
+               snippet: Provider.of<LocalizationProvider>(context, listen: false).t('tap_to_navigate'),
+               onTap: () {
+                 if (widget.onFuelStationTap != null) {
+                   widget.onFuelStationTap!(currStation);
+                 }
+               }
+             ),
+             zIndex: 1, 
+           ));
+        }
+      }
+    }
 
     setState(() {
       _markers = markers;
       _polylines = polylines;
     });
+    
+    // Auto-Fit Logic for Fuel Stations (ONLY if refit requested)
+    if (fuelPositions.isNotEmpty && refitBounds) {
+       if (vehiclePos != null) {
+          fuelPositions.add(vehiclePos);
+       }
+       
+       if (_overrideDestPos == null) {
+          _fitPolylineBounds(fuelPositions);
+       }
+    }
   }
 
-  Future<void> _updateCamera(LatLng pos, double heading) async {
-    // Only animate if position changed significantly or first load
-    if (_lastVehiclePos == pos && _lastHeading == heading && _isCameraInitialized) return;
+  // --- State ---
+  bool _following = true; // Auto-follow by default
+
+  Future<void> _updateCamera(LatLng pos, double heading, {bool force = false}) async {
+    // If not following (User panned or Overview mode), do not update camera automatically
+    if (!_following && !force) {
+       _lastVehiclePos = pos;
+       _lastHeading = heading;
+       return;
+    }
+
+    if (!force && _lastVehiclePos == pos && _lastHeading == heading && _isCameraInitialized) return;
     
     _lastVehiclePos = pos;
     _lastHeading = heading;
 
     final controller = await _controller.future;
     
-    // "Best in Class" 3D Animation
-    // 1. High Zoom for detail
-    // 2. High Tilt (60 deg) for horizon view
-    // 3. Bearing aligned with vehicle heading (Navigation Mode)
-    
+    // Driving Mode / Follow Mode
     final cameraUpdate = CameraUpdate.newCameraPosition(CameraPosition(
       target: pos,
-      zoom: 18.0,      // Zoomed IN
-      tilt: 50.0,      // Tilted for 3D
-      bearing: heading, // Dynamic Rotation
+      zoom: 18.0,
+      tilt: 50.0,
+      bearing: heading,
     ));
 
     controller.animateCamera(cameraUpdate);
     _isCameraInitialized = true;
+  }
+
+  void updateDestination(LatLng point, String name, {List<LatLng>? routePoints}) {
+    setState(() {
+       _overrideDestPos = point;
+       _overrideDestName = name;
+       _following = true; // Auto-follow immediately
+       
+       if (routePoints != null && routePoints.isNotEmpty) {
+           _overrideRouteCurve = routePoints;
+       }
+    });
+    
+    _parseJobData();
+
+    // User requested "Recenter should be made" -> Snap to vehicle immediately
+    if (_lastVehiclePos != null) {
+        _updateCamera(_lastVehiclePos!, _lastHeading, force: true);
+    }
+    
+    // Optionally we could fit bounds if vehicle is huge distance away, but user asked for Recenter.
+    // if (routePoints != null && routePoints.isNotEmpty) {
+    //    _fitPolylineBounds(routePoints);
+    // }
+  }
+
+  void resetNavigation() {
+     setState(() {
+        _overrideDestPos = null;
+        _overrideDestName = null;
+        _overrideRouteCurve = null;
+        _following = true; // Resume following
+     });
+     
+     _parseJobData();
+     
+     if (_lastVehiclePos != null) {
+         _updateCamera(_lastVehiclePos!, _lastHeading, force: true);
+     }
+  }
+
+  void recenter() {
+     setState(() => _following = true);
+     if (_lastVehiclePos != null) {
+         _updateCamera(_lastVehiclePos!, _lastHeading, force: true);
+     }
+  }
+
+  Future<void> _fitPolylineBounds(List<LatLng> points) async {
+     final controller = await _controller.future;
+     double minLat = points.first.latitude;
+     double maxLat = points.first.latitude;
+     double minLng = points.first.longitude;
+     double maxLng = points.first.longitude;
+
+     for (var p in points) {
+        if (p.latitude < minLat) minLat = p.latitude;
+        if (p.latitude > maxLat) maxLat = p.latitude;
+        if (p.longitude < minLng) minLng = p.longitude;
+        if (p.longitude > maxLng) maxLng = p.longitude;
+     }
+
+     controller.animateCamera(CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+           southwest: LatLng(minLat, minLng),
+           northeast: LatLng(maxLat, maxLng)
+        ), 
+        50 // padding
+     ));
+  }
+
+  Future<void> _fitBounds(LatLng p1, LatLng p2) async {
+    final controller = await _controller.future;
+    
+    LatLngBounds bounds;
+    if (p1.latitude > p2.latitude && p1.longitude > p2.longitude) {
+      bounds = LatLngBounds(southwest: p2, northeast: p1);
+    } else if (p1.longitude > p2.longitude) {
+      bounds = LatLngBounds(
+          southwest: LatLng(p1.latitude, p2.longitude),
+          northeast: LatLng(p2.latitude, p1.longitude));
+    } else if (p1.latitude > p2.latitude) {
+      bounds = LatLngBounds(
+          southwest: LatLng(p2.latitude, p1.longitude),
+          northeast: LatLng(p1.latitude, p2.longitude));
+    } else {
+      bounds = LatLngBounds(southwest: p1, northeast: p2);
+    }
+
+    controller.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
   }
 
   @override
@@ -214,15 +382,23 @@ class _LiveJobMapState extends State<LiveJobMap> {
           controller.setMapStyle(_mapStyle);
         }
       },
+      onCameraMoveStarted: () {
+          // If user touches map, stop auto-following
+          if (_following) {
+             setState(() => _following = false);
+          }
+      },
       // UI Settings for Clean "Navigation" Look
-      zoomControlsEnabled: false,
+      zoomControlsEnabled: false,      // Clean UI
+      zoomGesturesEnabled: true,
+      scrollGesturesEnabled: true,
       myLocationEnabled: false,
       myLocationButtonEnabled: false,
       mapToolbarEnabled: false,
       compassEnabled: false, 
       rotateGesturesEnabled: true,
       tiltGesturesEnabled: true,
-      trafficEnabled: false, // Optional: Turn on if real-time traffic desired
+      trafficEnabled: false, 
     );
   }
 }

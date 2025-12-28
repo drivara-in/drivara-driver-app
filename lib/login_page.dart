@@ -35,29 +35,41 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _handleLogin() async {
     final phone = _phoneController.text.trim();
+    debugPrint("Login Attempt: Phone='$phone'");
     if (phone.isEmpty) {
+        debugPrint("Login Failed: Phone is empty");
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter a phone number")));
         return;
     }
 
     setState(() => _isLoading = true);
+    debugPrint("Login: Sending OTP request to /driver/auth/send-otp...");
     
     try {
       final response = await ApiConfig.dio.post('/driver/auth/send-otp', data: {'phone': phone});
+      debugPrint("Login Response: ${response.statusCode} - ${response.data}");
       
       if (!mounted) return;
 
-      if (response.data['ok'] == true) {
+      if (response.data is Map && response.data['ok'] == true) {
          Navigator.of(context).push(
            MaterialPageRoute(builder: (_) => OtpPage(phone: phone)),
          );
       } else {
-         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(response.data['message'] ?? "Login failed")));
+         final msg = (response.data is Map) ? response.data['message'] : "Unexpected response from server";
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg ?? "Login failed")));
       }
     } on DioException catch (e) {
+      debugPrint("Login DioError: ${e.message} - ${e.response?.data}");
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.response?.data['message'] ?? e.message ?? "Network error")));
+      
+      String? errorMsg;
+      if (e.response?.data is Map) {
+         errorMsg = e.response?.data['message'];
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMsg ?? e.message ?? "Network error")));
     } catch (e) {
+      debugPrint("Login Error: $e");
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
     } finally {
@@ -128,88 +140,92 @@ class _LoginPageState extends State<LoginPage> {
           ),
 
           SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                   // Drivara Branding
-                   Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Image.asset(
-                            'assets/images/drivara-icon.png',
-                            height: 72, // Larger
-                            fit: BoxFit.contain,
-                            color: Theme.of(context).primaryColor, 
-                          ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.2, end: 0),
-                          const SizedBox(height: 16),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
+            child: Center(
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                       // Drivara Branding
+                       Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text("Drivara", style: AppTextStyles.header.copyWith(fontSize: 32, height: 1, color: Theme.of(context).textTheme.bodyLarge?.color)),
-                              Text("DRIVER", style: AppTextStyles.label.copyWith(fontSize: 14, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6), letterSpacing: 4)),
+                              Image.asset(
+                                'assets/images/drivara-icon.png',
+                                height: 72, // Larger
+                                fit: BoxFit.contain,
+                                // color: Theme.of(context).primaryColor, // REMOVED: Show original colors
+                              ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.2, end: 0),
+                              const SizedBox(height: 16),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text("Drivara", style: AppTextStyles.header.copyWith(fontSize: 32, height: 1, color: Theme.of(context).textTheme.bodyLarge?.color)),
+                                  Text("DRIVER", style: AppTextStyles.label.copyWith(fontSize: 14, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6), letterSpacing: 4)),
+                                ],
+                              ).animate().fadeIn(delay: 200.ms),
                             ],
-                          ).animate().fadeIn(delay: 200.ms),
-                        ],
-                      )
-                   ),
-                  
-                  const SizedBox(height: 48), // Increased spacing
-                  
-                  // Phone Input
-                  TextField(
-                    controller: _phoneController,
-                    style: AppTextStyles.body.copyWith(fontSize: 18, color: Theme.of(context).textTheme.bodyLarge?.color),
-                    keyboardType: TextInputType.phone,
-                    decoration: InputDecoration(
-                       filled: true,
-                       fillColor: Theme.of(context).inputDecorationTheme.fillColor,
-                       hintText: t.t('phone_hint'),
-                       hintStyle: AppTextStyles.body.copyWith(color: Theme.of(context).hintColor),
-                       prefixIcon: Icon(Icons.phone_android, color: Theme.of(context).iconTheme.color),
-                       border: OutlineInputBorder(
-                         borderRadius: BorderRadius.circular(12),
-                         borderSide: BorderSide(color: Theme.of(context).dividerColor),
+                          )
                        ),
-                       enabledBorder: OutlineInputBorder(
-                         borderRadius: BorderRadius.circular(12),
-                         borderSide: BorderSide(color: Theme.of(context).dividerColor),
-                       ),
-                       focusedBorder: OutlineInputBorder(
-                         borderRadius: BorderRadius.circular(12),
-                         borderSide: BorderSide(color: Theme.of(context).primaryColor),
-                       ),
-                       contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-                    ),
-                  ).animate().fadeIn(delay: 400.ms, duration: 600.ms).slideY(begin: 0.2, end: 0),
+                      
+                      const SizedBox(height: 48), // Increased spacing
+                      
+                      // Phone Input
+                      TextField(
+                        controller: _phoneController,
+                        style: AppTextStyles.body.copyWith(fontSize: 18, color: Theme.of(context).textTheme.bodyLarge?.color),
+                        keyboardType: TextInputType.phone,
+                        decoration: InputDecoration(
+                           filled: true,
+                           fillColor: Theme.of(context).inputDecorationTheme.fillColor,
+                           hintText: t.t('phone_hint'),
+                           hintStyle: AppTextStyles.body.copyWith(color: Theme.of(context).hintColor),
+                           prefixIcon: Icon(Icons.phone_android, color: Theme.of(context).iconTheme.color),
+                           border: OutlineInputBorder(
+                             borderRadius: BorderRadius.circular(12),
+                             borderSide: BorderSide(color: Theme.of(context).dividerColor),
+                           ),
+                           enabledBorder: OutlineInputBorder(
+                             borderRadius: BorderRadius.circular(12),
+                             borderSide: BorderSide(color: Theme.of(context).dividerColor),
+                           ),
+                           focusedBorder: OutlineInputBorder(
+                             borderRadius: BorderRadius.circular(12),
+                             borderSide: BorderSide(color: Theme.of(context).primaryColor),
+                           ),
+                           contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                        ),
+                      ).animate().fadeIn(delay: 400.ms, duration: 600.ms).slideY(begin: 0.2, end: 0),
 
-                  const SizedBox(height: 24),
+                      const SizedBox(height: 24),
 
-                  // Login Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _handleLogin,
-                      style: Theme.of(context).elevatedButtonTheme.style,
-                      child: _isLoading 
-                        ? const Center(child: SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)))
-                        : Text(t.t('get_started')),
-                    ),
-                  ).animate().fadeIn(delay: 600.ms, duration: 600.ms).slideY(begin: 0.2, end: 0),
-                  
-                  const SizedBox(height: 24),
-                   Center(
-                    child: Text(
-                      'By continuing, you agree to our Terms & Privacy Policy.',
-                      textAlign: TextAlign.center,
-                      style: AppTextStyles.label.copyWith(color: Theme.of(context).textTheme.bodySmall?.color),
-                    ),
-                  ).animate().fadeIn(delay: 800.ms),
-                ],
+                      // Login Button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _handleLogin,
+                          style: Theme.of(context).elevatedButtonTheme.style,
+                          child: _isLoading 
+                            ? const Center(child: SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)))
+                            : Text(t.t('get_started')),
+                        ),
+                      ).animate().fadeIn(delay: 600.ms, duration: 600.ms).slideY(begin: 0.2, end: 0),
+                      
+                      const SizedBox(height: 24),
+                       Center(
+                        child: Text(
+                          'By continuing, you agree to our Terms & Privacy Policy.',
+                          textAlign: TextAlign.center,
+                          style: AppTextStyles.label.copyWith(color: Theme.of(context).textTheme.bodySmall?.color),
+                        ),
+                      ).animate().fadeIn(delay: 800.ms),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),

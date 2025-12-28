@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
 import 'dart:async';
+import 'dart:math' as math;
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:dio/dio.dart';
 import 'package:provider/provider.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:drivara_driver_app/widgets/live_job_map.dart';
 import 'package:lottie/lottie.dart';
 import 'package:drivara_driver_app/widgets/route_timeline.dart';
+import 'package:drivara_driver_app/widgets/add_expense_sheet.dart';
+import 'package:drivara_driver_app/widgets/expense_list_sheet.dart';
 import 'api_config.dart';
 import 'providers/localization_provider.dart';
 import 'no_job_page.dart';
@@ -14,6 +18,8 @@ import 'login_page.dart';
 import 'theme/app_theme.dart';
 import 'providers/theme_provider.dart';
 import 'services/job_stream_service.dart';
+import 'services/find_fuel_service.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ActiveJobPage extends StatefulWidget {
   final Map<String, dynamic> job;
@@ -28,9 +34,11 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
   Map<String, dynamic>? _dashboardData;
   bool _isLoading = false;
   bool _isActionLoading = false;
+  List<Map<String, dynamic>>? _fuelStations;
 
   JobStreamService? _streamService;
   StreamSubscription? _streamSubscription;
+  final GlobalKey<dynamic> _mapKey = GlobalKey(); // Using dynamic to access state methods loosely or type it if possible
 
   @override
   void initState() {
@@ -53,6 +61,8 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
     _streamService = JobStreamService(jobId: _job['id']);
     _streamSubscription = _streamService!.connect().listen((data) {
         if (!mounted) return;
+        debugPrint("SSE RECEIVED: $data"); // Re-enabled
+        debugPrint("SSE FUEL RAW: ${data['fuel_level']}");
         setState(() {
            // Merge stream data into dashboard data structure
            // The stream payload is flat, but dashboard expects nested structure.
@@ -60,18 +70,28 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
            
            final vehicle = _dashboardData?['vehicle'] ?? {};
            vehicle['location'] = {
-              'lat': data['lat'] ?? 0,
-              'lng': data['lng'] ?? 0,
-              'heading': data['heading'] ?? 0
+              'lat': (data['lat'] as num?)?.toDouble() ?? 0.0,
+              'lng': (data['lng'] as num?)?.toDouble() ?? 0.0,
+              'heading': (data['heading'] as num?)?.toDouble() ?? 0.0
            };
            vehicle['speed_kmh'] = data['speed'] ?? 0;
            vehicle['odometer_km'] = data['odometer'] ?? vehicle['odometer_km'];
-           vehicle['fuel_level_percent'] = data['fuel_level'] ?? vehicle['fuel_level_percent']; // New from stream
-           vehicle['def_level_percent'] = data['def_level'] ?? vehicle['def_level_percent'];   // New from stream
+           
+           // Robust parsing for Int gauges
+           if (data['fuel_level'] != null) {
+               vehicle['fuel_level_percent'] = (data['fuel_level'] as num).toInt(); 
+           }
+           if (data['def_level'] != null) {
+               vehicle['def_level_percent'] = (data['def_level'] as num).toInt();
+           }
            
            final balances = _dashboardData?['balances'] ?? {};
-           if (data['fuel_wallet_balance'] != null) balances['fuel'] = data['fuel_wallet_balance'];
-           if (data['fastag_wallet_balance'] != null) balances['fastag'] = data['fastag_wallet_balance'];
+           if (data['fuel_wallet_balance'] != null) {
+              balances['fuel'] = data['fuel_wallet_balance']; 
+           }
+           if (data['fastag_wallet_balance'] != null) {
+              balances['fastag'] = data['fastag_wallet_balance'];
+           }
 
            final route = _dashboardData?['route'] ?? {};
            // If we have distance left, update it
@@ -87,6 +107,15 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
               'balances': balances,
               'route': route, 
            };
+           
+           // Force update map
+           final state = _mapKey.currentState;
+           if (state != null) {
+              (state as dynamic).updateVehicleLocation(
+                  LatLng(vehicle['location']['lat'], vehicle['location']['lng']),
+                  vehicle['location']['heading'] ?? 0.0
+              );
+           }
         });
     });
   }
@@ -98,6 +127,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
       if (!mounted) return;
       setState(() {
         _dashboardData = response.data;
+        debugPrint("DASHBOARD DATA: Vehicle: ${_dashboardData?['vehicle']}"); // Debug Initial Data
         if (_dashboardData?['job'] != null) {
             _job = _dashboardData!['job'];
         }
@@ -135,6 +165,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
 
   void _showThemeSheet(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final t = Provider.of<LocalizationProvider>(context, listen: false);
     
     showModalBottomSheet(
       context: context,
@@ -147,11 +178,11 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Select Theme', style: AppTextStyles.header.copyWith(fontSize: 20, color: Theme.of(context).textTheme.bodyLarge?.color)),
+              Text(t.t('select_theme'), style: AppTextStyles.header.copyWith(fontSize: 20, color: Theme.of(context).textTheme.bodyLarge?.color)),
               const SizedBox(height: 16),
-              _buildThemeOption(themeProvider, 'System Default', ThemeMode.system, Icons.smartphone),
-              _buildThemeOption(themeProvider, 'Light Mode', ThemeMode.light, Icons.wb_sunny),
-              _buildThemeOption(themeProvider, 'Dark Mode', ThemeMode.dark, Icons.nightlight_round),
+              _buildThemeOption(themeProvider, t.t('theme_system'), ThemeMode.system, Icons.smartphone),
+              _buildThemeOption(themeProvider, t.t('theme_light'), ThemeMode.light, Icons.wb_sunny),
+              _buildThemeOption(themeProvider, t.t('theme_dark'), ThemeMode.dark, Icons.nightlight_round),
             ],
           ),
         );
@@ -234,6 +265,75 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
     );
   }
 
+  void _showFuelOptions() async {
+      final vehicle = _dashboardData?['vehicle'] ?? {};
+      final loc = vehicle['location'];
+      
+      if (loc == null || loc['lat'] == 0 || loc['lng'] == 0) {
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Provider.of<LocalizationProvider>(context, listen: false).t('vehicle_location_unknown'))));
+         return;
+      }
+      
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Provider.of<LocalizationProvider>(context, listen: false).t('searching_pumps')), duration: const Duration(milliseconds: 1500)));
+
+      try {
+         final service = FindFuelService();
+         double lat = (loc['lat'] is String) ? double.tryParse(loc['lat']) ?? 0 : (loc['lat'] as num).toDouble();
+         double lng = (loc['lng'] is String) ? double.tryParse(loc['lng']) ?? 0 : (loc['lng'] as num).toDouble();
+         
+         String? routePolyline;
+         if (_job['route_path'] is String) {
+            routePolyline = _job['route_path'];
+         }
+
+         final pumps = await service.findNearbyIndianOil(LatLng(lat, lng), routePolyline: routePolyline);
+         
+         if (pumps.isEmpty) {
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Provider.of<LocalizationProvider>(context, listen: false).t('no_pumps_found'))));
+            return;
+         }
+         
+         if (!mounted) return;
+
+         // Update Map Markers
+         setState(() {
+            _fuelStations = pumps;
+         });
+         
+         // Inform user
+         // Inform user
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+           content: Text("${Provider.of<LocalizationProvider>(context, listen: false).t('found_pumps')} (${pumps.length})"),
+           duration: const Duration(seconds: 4),
+         ));
+
+      } catch (e) {
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("${Provider.of<LocalizationProvider>(context, listen: false).t('error_searching_fuel')} $e"))); 
+      }
+  }
+
+  void _showExpenseSheet() {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => AddExpenseSheet(
+           job: _job,
+           onSuccess: _fetchDashboardData, // refresh balances
+        ),
+      );
+  }
+
+  void _showExpenseList() {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => ExpenseListSheet(job: _job),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = Provider.of<LocalizationProvider>(context);
@@ -309,64 +409,189 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
         ? const Center(child: CircularProgressIndicator())
         : Stack(
           children: [
-            // 1. Full Screen Map Background (Top Half)
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: size.height * 0.65, // Occupy top 65%
+            // 1. Full Screen Map Background
+            Positioned.fill(
               child: LiveJobMap(
+                  key: _mapKey, // Assign Key
                   job: _job,
                   vehicle: vehicle,
+                  fuelStations: _fuelStations,
+                  onFuelStationTap: (station) async {
+                    final state = _mapKey.currentState;
+                    if (state != null) {
+                       // 1. Optimistic Update
+                       (state as dynamic).updateDestination(
+                          LatLng(station['lat'], station['lng']),
+                          station['name']
+                       );
+                       
+                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                         content: Text("${Provider.of<LocalizationProvider>(context, listen: false).t('routing_to')} ${station['name']}..."), 
+                         duration: const Duration(seconds: 1)
+                       ));
+
+                       // 2. Directions
+                       try {
+                           final vLoc = vehicle['location'];
+                           if (vLoc != null) {
+                              final lat = (vLoc['lat'] as num).toDouble();
+                              final lng = (vLoc['lng'] as num).toDouble();
+                              final service = FindFuelService();
+                              final routePoints = await service.getDirections(
+                                  LatLng(lat, lng), 
+                                  LatLng(station['lat'], station['lng'])
+                              );
+                              if (routePoints.isNotEmpty) {
+                                  (state as dynamic).updateDestination(
+                                     LatLng(station['lat'], station['lng']),
+                                     station['name'],
+                                     routePoints: routePoints
+                                  );
+                              } else {
+                                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Provider.of<LocalizationProvider>(context, listen: false).t('no_road_route_found'))));
+                              }
+                           }
+                       } catch (e) {
+                          debugPrint("Error fetching route: $e");
+                       }
+                    }
+                  },
               ),
             ),
             
-            // 2. Header Gradient for Visibility
+            // 2. Header Gradient
             Positioned(
               top: 0,
               left: 0,
               right: 0,
-              height: 120,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Theme.of(context).scaffoldBackgroundColor.withOpacity(0.9), 
-                      Theme.of(context).scaffoldBackgroundColor.withOpacity(0.0)
-                    ],
+              height: 180, // Slightly taller
+              child: IgnorePointer(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Theme.of(context).scaffoldBackgroundColor.withOpacity(1.0), // Fully solid at top
+                        Theme.of(context).scaffoldBackgroundColor.withOpacity(0.8), // Stays strong
+                        Theme.of(context).scaffoldBackgroundColor.withOpacity(0.0)
+                      ],
+                      stops: const [0.0, 0.6, 1.0], // Push the fade lower down
+                    ),
                   ),
                 ),
               ),
             ),
 
+            // 3. Find Fuel Button (Floating on Map) - Moved BEFORE sheet so sheet covers it
+            Positioned(
+              right: 16,
+              top: 130, // Below header
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                   // 1. Recenter / Navigation Button
+                   FloatingActionButton(
+                        heroTag: "recenterBtn",
+                        onPressed: () {
+                           final state = _mapKey.currentState;
+                           if (state != null) {
+                              (state as dynamic).recenter();
+                           }
+                        },
+                        mini: true,
+                        backgroundColor: Theme.of(context).cardTheme.color,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: Icon(Icons.navigation, color: Theme.of(context).primaryColor),
+                   ),
+                   const SizedBox(height: 12),
+                   
+                   // 2. Clear Route (Only if fuel stations active)
+                   if (_fuelStations != null)
+                     Padding(
+                       padding: const EdgeInsets.only(bottom: 12),
+                       child: FloatingActionButton(
+                            heroTag: "clearBtn",
+                            onPressed: () {
+                               setState(() => _fuelStations = null);
+                               final state = _mapKey.currentState;
+                               if (state != null) {
+                                  (state as dynamic).resetNavigation();
+                               }
+                            },
+                            mini: true,
+                            backgroundColor: Colors.redAccent,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            child: const Icon(Icons.close, color: Colors.white),
+                       ),
+                     ),
 
-
-            // 4. Draggable/Scrollable Content Sheet
-            Positioned.fill(
-              child: SingleChildScrollView(
-                physics: const ClampingScrollPhysics(), // Solid feel
-                child: Column(
-                  children: [
-                    // Invisible Spacer to reveal Map
-                    SizedBox(height: size.height * 0.55), 
+                   // 3. Fuel Search (Only if NOT navigating/searching)
+                   if (_fuelStations == null)
+                     FloatingActionButton(
+                        heroTag: "fuelBtn", 
+                        onPressed: _showFuelOptions,
+                        mini: true,
+                        backgroundColor: Colors.orange,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: const Icon(Icons.local_gas_station, color: Colors.white),
+                     ),
                     
-                    // The "Sheet"
-                    Container(
-                      constraints: BoxConstraints(minHeight: size.height * 0.5),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardTheme.color,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-                        boxShadow: [
-                           BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, -5))
-                        ]
-                      ),
-                      padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+                   const SizedBox(height: 12),
+                   
+                   // 4. Add Expense
+                   FloatingActionButton(
+                        heroTag: "expenseBtn",
+                        onPressed: () {
+                          // Dynamic import or local usage? Need to import at top.
+                          // Assuming import added below manually or via separate chunk
+                          _showExpenseSheet();
+                        },
+                        mini: true,
+                        backgroundColor: Colors.purpleAccent,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: const Icon(Icons.add_circle, color: Colors.white),
+                   ),
+                   
+                   const SizedBox(height: 12),
+                   
+                   // 5. View Expenses
+                   FloatingActionButton(
+                        heroTag: "viewExpensesBtn",
+                        onPressed: _showExpenseList,
+                        mini: true,
+                        backgroundColor: Colors.blueAccent,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: const Icon(Icons.list_alt, color: Colors.white),
+                   ),
+                ],
+              ),
+            ),
+
+            // 4. Draggable Sheet
+            DraggableScrollableSheet(
+              initialChildSize: 0.45,
+              minChildSize: 0.40,
+              maxChildSize: 0.88, // Stops just below header for "Merge" effect
+              snap: true,
+              builder: (context, scrollController) {
+                return Container(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).cardTheme.color,
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+                      boxShadow: [
+                          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, -5))
+                      ]
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: SingleChildScrollView(
+                      controller: scrollController,
+                      physics: const ClampingScrollPhysics(),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                           // Handle Bar (Visual cue)
+                           const SizedBox(height: 16),
+                           // Handle Bar
                            Center(
                              child: Container(
                                width: 40, height: 4,
@@ -381,7 +606,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                             children: [
                               Expanded(
                                   child: Text(
-                                    _job['title'] ?? 'Job #${_job['id']}', 
+                                    _job['title'] ?? '${t.t('job_label')} #${_job['id']}', 
                                     style: AppTextStyles.header.copyWith(fontSize: 24, color: Theme.of(context).textTheme.bodyLarge?.color),
                                     overflow: TextOverflow.ellipsis,
                                     maxLines: 2,
@@ -481,6 +706,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                                            progress: progress, 
                                            activeColor: AppColors.primary,
                                            inactiveColor: Theme.of(context).dividerColor,
+                                           stops: (_job['route_stops'] as List?)?.cast<Map<String, dynamic>>(),
                                        ),
                                        
                                        const SizedBox(height: 10),
@@ -492,11 +718,10 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                                                     crossAxisAlignment: CrossAxisAlignment.start,
                                                     children: [
                                                        Text(
-                                                         _job['origin_address']?.split(',')[0] ?? 'Start', 
+                                                         _job['origin_address']?.split(',')[0] ?? t.t('label_start'), 
                                                          style: AppTextStyles.label.copyWith(fontWeight: FontWeight.bold, fontSize: 12),
                                                          maxLines: 1, overflow: TextOverflow.ellipsis
                                                        ),
-                                                       Text(t.t('start_location'), style: AppTextStyles.label.copyWith(fontSize: 10, color: Colors.grey)),
                                                     ]
                                                  ),
                                                ),
@@ -505,11 +730,10 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                                                     crossAxisAlignment: CrossAxisAlignment.end,
                                                     children: [
                                                        Text(
-                                                         _job['destination_address']?.split(',')[0] ?? 'End', 
+                                                         _job['destination_address']?.split(',')[0] ?? t.t('label_end'), 
                                                          style: AppTextStyles.label.copyWith(fontWeight: FontWeight.bold, fontSize: 12),
                                                          maxLines: 1, overflow: TextOverflow.ellipsis
                                                        ),
-                                                       Text(t.t('destination_location'), style: AppTextStyles.label.copyWith(fontSize: 10, color: Colors.grey)),
                                                     ]
                                                  ),
                                                ),
@@ -561,11 +785,12 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                             const SizedBox(height: 40), // Bottom padding
                         ],
                       ),
-                    ),
-                  ],
-                ),
-              ),
+                    )
+                );
+              }
             ),
+
+
 
             // 3. Header Content (Floating) - Moved to bottom to be on top of Sheet (z-index)
             Positioned(
@@ -580,13 +805,13 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                     children: [
                       Row(
                         children: [
-                          Image.asset('assets/images/drivara-icon.png', height: 40, color: AppColors.primary),
+                          Image.asset('assets/images/drivara-icon.png', height: 40),
                           const SizedBox(width: 8),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Text("Drivara", style: AppTextStyles.header.copyWith(fontSize: 18, height: 1, color: Theme.of(context).textTheme.bodyLarge?.color)),
-                              Text("DRIVER", style: AppTextStyles.label.copyWith(fontSize: 10, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6), letterSpacing: 2)),
+                              Text(t.t('driver_role'), style: AppTextStyles.label.copyWith(fontSize: 10, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6), letterSpacing: 2)),
                             ],
                           )
                         ],
@@ -652,7 +877,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
     );
   }
 
-  Widget _buildPremiumGauge(String label, int percent, num capacity, Color color, IconData icon) {
+  Widget _buildPremiumGauge(String label, num percent, num capacity, Color color, IconData icon) {
       final t = Provider.of<LocalizationProvider>(context);
       double liters = 0;
       if (capacity > 0) {
