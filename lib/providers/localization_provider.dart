@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/translation_service.dart';
 
 class LocalizationProvider extends ChangeNotifier {
   Locale _locale = const Locale('en', 'US');
@@ -105,6 +106,8 @@ class LocalizationProvider extends ChangeNotifier {
       'etype_Food': 'Food',
       'etype_Other': 'Other',
       'etype_Parking': 'Parking',
+      'etype_Fuel Expense': 'Fuel Expense',
+      'etype_FASTag Expense': 'FASTag Expense',
       // Active Job Page
       'vehicle_location_unknown': 'Vehicle location unknown',
       'searching_pumps': 'Searching for Indian Oil pumps...',
@@ -122,9 +125,36 @@ class LocalizationProvider extends ChangeNotifier {
       'job_label': 'Job',
       'label_start': 'Start',
       'label_end': 'End',
+      'bill_image_opt': 'Bill Image (Optional)',
+      'bill_image_req': 'Bill Image (Required)',
+      'camera': 'Camera',
+      'gallery': 'Gallery',
+      'bill_required_error': 'A bill image is required for this expense type',
+      'delete_expense': 'Delete Expense',
+      'delete_expense_confirm': 'Are you sure you want to delete this expense?',
+      'expense_deleted': 'Expense deleted successfully',
+      'delete': 'Delete',
+      'cancel': 'Cancel',
+      // Driver Switch
+      'switch_driver_title': 'Switch Driver?',
+      'switch_driver_content': 'Are you sure you want to hand over driving duties? An OTP will be sent to the co-driver.',
+      'verify_codriver_title': 'Verify Co-Driver',
+      'enter_otp_label': 'Enter OTP',
+      'verify_switch_btn': 'Verify & Switch',
+      'driver_switched_success': 'Driver Switched Successfully!',
+      'invalid_otp': 'Invalid OTP',
+      'switch_verification_failed': 'Switch verification failed',
+      'you_are_driving': 'You are Driving',
+      'passenger_codriver': 'Passenger / Co-Driver',
+      'switch_btn': 'Switch',
+      'send_otp': 'Send OTP',
+      'failed_request_switch': 'Failed to request switch',
+      'take_over_title': 'Take Control?',
+      'take_over_content': 'Request to take over driving duties? An OTP will be sent to the current driver.',
+      'take_over_btn': 'Take Over',
     },
     'hi': {
-      'login_title': 'ड्राइवारा ड्राइवर',
+      'login_title': 'Drivara Driver',
       'login_subtitle': 'लॉगिन करने के लिए अपना नंबर दर्ज करें',
       'phone_hint': 'मोबाइल नंबर',
       'get_started': 'शुरू करें',
@@ -194,6 +224,8 @@ class LocalizationProvider extends ChangeNotifier {
       'etype_Food': 'खाना',
       'etype_Other': 'अन्य',
       'etype_Parking': 'पार्किंग',
+      'etype_Fuel Expense': 'ईंधन खर्च',
+      'etype_FASTag Expense': 'फास्टैग खर्च',
       // Active Job Page
       'vehicle_location_unknown': 'वाहन का स्थान अज्ञात',
       'searching_pumps': 'इंडियन ऑयल पंप खोजे जा रहे हैं...',
@@ -211,6 +243,33 @@ class LocalizationProvider extends ChangeNotifier {
       'job_label': 'ट्रिप',
       'label_start': 'प्रारंभ',
       'label_end': 'समाप्त',
+      'bill_image_opt': 'बिल की फोटो (वैकल्पिक)',
+      'bill_image_req': 'बिल की फोटो (अनिवार्य)',
+      'camera': 'कैमरा',
+      'gallery': 'गैलरी',
+      'bill_required_error': 'इस खर्च के लिए बिल की फोटो अनिवार्य है',
+      'delete_expense': 'व्यय हटाएं',
+      'delete_expense_confirm': 'क्या आप वाकई इस व्यय को हटाना चाहते हैं?',
+      'expense_deleted': 'व्यय सफलतापूर्वक हटा दिया गया',
+      'delete': 'हटाएं',
+      'cancel': 'रद्द करें',
+      // Driver Switch
+      'switch_driver_title': 'ड्राइवर बदलें?',
+      'switch_driver_content': 'क्या आप ड्राइविंग ड्यूटी सौंपना चाहते हैं? सह-चालक को एक ओटीपी भेजा जाएगा।',
+      'verify_codriver_title': 'सह-चालक सत्यापित करें',
+      'enter_otp_label': 'ओटीपी दर्ज करें',
+      'verify_switch_btn': 'सत्यापित करें और बदलें',
+      'driver_switched_success': 'ड्राइवर सफलतापूर्वक बदला गया!',
+      'invalid_otp': 'अमान्य ओटीपी',
+      'switch_verification_failed': 'सत्यापन विफल',
+      'you_are_driving': 'आप गाड़ी चला रहे हैं',
+      'passenger_codriver': 'यात्री / सह-चालक',
+      'switch_btn': 'बदलें',
+      'send_otp': 'ओटीपी भेजें',
+      'failed_request_switch': 'स्विच का अनुरोध करने में विफल',
+      'take_over_title': 'नियंत्रण लें?',
+      'take_over_content': 'ड्राइविंग ड्यूटी लेने का अनुरोध करें? वर्तमान ड्राइवर को एक ओटीपी भेजा जाएगा।',
+      'take_over_btn': 'टेक ओवर',
     },
     'te': { // Telugu
       'login_title': 'Drivara Driver',
@@ -283,6 +342,8 @@ class LocalizationProvider extends ChangeNotifier {
       'etype_Food': 'భోజనం',
       'etype_Other': 'ఇతర',
       'etype_Parking': 'పార్కింగ్',
+      'etype_Fuel Expense': 'ఇంధన ఖర్చు',
+      'etype_FASTag Expense': 'ఫాస్ట్యాగ్ ఖర్చు',
       // Active Job Page
       'vehicle_location_unknown': 'వాహన స్థానం తెలియదు',
       'searching_pumps': 'ఇండియన్ ఆయిల్ పంపుల కోసం వెతుకుతోంది...',
@@ -300,6 +361,33 @@ class LocalizationProvider extends ChangeNotifier {
       'job_label': 'ట్రిప్',
       'label_start': 'ప్రారంభించండి',
       'label_end': 'ముగించు',
+      'bill_image_opt': 'బిల్ ఫోటో (ఐచ్ఛికం)',
+      'bill_image_req': 'బిల్ ఫోటో (తప్పనిసరి)',
+      'camera': 'కెమెరా',
+      'gallery': 'గ్యాలరీ',
+      'bill_required_error': 'ఈ ఖర్చు కోసం బిల్ ఫోటో తప్పనిసరి',
+      'delete_expense': 'ఖర్చును తొలగించండి',
+      'delete_expense_confirm': 'మీరు ఖచ్చితంగా ఈ ఖర్చును తొలగించాలనుకుంటున్నారా?',
+      'expense_deleted': 'ఖర్చు విజయవంతంగా తొలగించబడింది',
+      'delete': 'తొలగించు',
+      'cancel': 'రద్దు చేయి',
+      // Driver Switch
+      'switch_driver_title': 'డ్రైవర్‌ను మార్చాలా?',
+      'switch_driver_content': 'మీరు డ్రైవింగ్ బాధ్యతలను అప్పగించాలనుకుంటున్నారా? కో-డ్రైవర్‌కు OTP పంపబడుతుంది.',
+      'verify_codriver_title': 'కో-డ్రైవర్‌ను ధృవీకరించండి',
+      'enter_otp_label': 'OTP నమోదు చేయండి',
+      'verify_switch_btn': 'ధృవీకరించండి & మార్చండి',
+      'driver_switched_success': 'డ్రైవర్ విజయవంతంగా మార్చబడ్డారు!',
+      'invalid_otp': 'చెల్లని OTP',
+      'switch_verification_failed': 'ధృవీకరణ విఫలమైంది',
+      'you_are_driving': 'మీరు డ్రైవింగ్ చేస్తున్నారు',
+      'passenger_codriver': 'ప్రయాణీకుడు / కో-డ్రైవర్',
+      'switch_btn': 'మార్చండి',
+      'send_otp': 'OTP పంపండి',
+      'failed_request_switch': 'మార్పు అభ్యర్థన విఫలమైంది',
+      'take_over_title': 'కంట్రోల్ తీసుకోవాలా?',
+      'take_over_content': 'డ్రైవింగ్ బాధ్యతలు తీసుకోవాలా? ప్రస్తుత డ్రైవర్‌కు OTP పంపబడుతుంది.',
+      'take_over_btn': 'టేక్ ఓవర్',
     },
     'ml': { // Malayalam
       'login_title': 'Drivara Driver',
@@ -372,6 +460,8 @@ class LocalizationProvider extends ChangeNotifier {
       'etype_Food': 'ഭക്ഷണം',
       'etype_Other': 'മറ്റുള്ളവ',
       'etype_Parking': 'പാർക്കിംഗ്',
+      'etype_Fuel Expense': 'ഇന്ധന ചെലവ്',
+      'etype_FASTag Expense': 'ഫാസ്റ്റാഗ് ചെലവ്',
       // Active Job Page
       'vehicle_location_unknown': 'വാഹന ലൊക്കേഷൻ ലഭ്യമല്ല',
       'searching_pumps': 'ഇന്ത്യൻ ഓയിൽ പമ്പുകൾ തിരയുന്നു...',
@@ -385,7 +475,33 @@ class LocalizationProvider extends ChangeNotifier {
       'theme_system': 'സിസ്റ്റം ഡിഫോൾട്ട്',
       'theme_light': 'ലൈറ്റ് മോഡ്',
       'theme_dark': 'ഡാർക്ക് മോഡ്',
-      'driver_role': 'ഡ്രൈവർ',
+      'bill_image_opt': 'ബിൽ ചിത്രം (ഓപ്ഷണൽ)',
+      'bill_image_req': 'ബിൽ ചിത്രം (നിർബന്ധം)',
+      'camera': 'ക്യാമറ',
+      'gallery': 'ഗാലറി',
+      'bill_required_error': 'ഈ ചെലവിനായി ബിൽ ചിത്രം ആവശ്യമാണ്',
+      'delete_expense': 'ചെലവ് നീക്കം ചെയ്യുക',
+      'delete_expense_confirm': 'നിങ്ങൾക്ക് ഈ ചെലവ് നീക്കം ചെയ്യാൻ ഉറപ്പാണോ?',
+      'expense_deleted': 'ചെലവ് വിജയകരമായി നീക്കം ചെയ്തു',
+      'delete': 'നീക്കം ചെയ്യുക',
+      'cancel': 'റദ്ദാക്കുക',
+      // Driver Switch
+      'switch_driver_title': 'ഡ്രൈവർ മാറ്റണോ?',
+      'switch_driver_content': 'നിങ്ങൾക്ക് ഡ്രൈവിംഗ് ചുമതലകൾ കൈമാറാൻ ഉറപ്പാണോ? സഹ-ഡ്രൈവർക്ക് ഒരു OTP അയയ്ക്കും.',
+      'verify_codriver_title': 'സഹ-ഡ്രൈവർ പരിശോധിക്കുക',
+      'enter_otp_label': 'OTP നൽകുക',
+      'verify_switch_btn': 'പരിശോധിച്ച് മാറ്റുക',
+      'driver_switched_success': 'ഡ്രൈവർ വിജയകരമായി മാറി!',
+      'invalid_otp': 'അസാധുവായ OTP',
+      'switch_verification_failed': 'പരിശോധന പരാജയപ്പെട്ടു',
+      'you_are_driving': 'നിങ്ങൾ ഡ്രൈവ് ചെയ്യുന്നു',
+      'passenger_codriver': 'യാത്രക്കാരൻ / സഹ-ഡ്രൈവർ',
+      'switch_btn': 'മാറ്റുക',
+      'send_otp': 'OTP അയയ്ക്കുക',
+      'failed_request_switch': 'മാറ്റാനുള്ള അഭ്യർത്ഥന പരാജയപ്പെട്ടു',
+      'take_over_title': 'നിയന്ത്രണം ഏറ്റെടുക്കണോ?',
+      'take_over_content': 'ഡ്രൈവിംഗ് ചുമതലകൾ ഏറ്റെടുക്കണോ? നിലവിലെ ഡ്രൈവർക്ക് ഒരു OTP അയയ്ക്കും.',
+      'take_over_btn': 'ഏറ്റെടുക്കുക',
     },
     'kn': { // Kannada
       'login_title': 'Drivara Driver',
@@ -458,6 +574,8 @@ class LocalizationProvider extends ChangeNotifier {
       'etype_Food': 'ಆಹಾರ',
       'etype_Other': 'ಇತರೆ',
       'etype_Parking': 'ಪಾರ್ಕಿಂಗ್',
+      'etype_Fuel Expense': 'ಇಂಧನ ವೆಚ್ಚ',
+      'etype_FASTag Expense': 'ಫಾಸ್ಟ್ಯಾಗ್ ವೆಚ್ಚ',
       // Active Job Page
       'vehicle_location_unknown': 'ವಾಹನದ ಸ್ಥಳ ತಿಳಿದಿಲ್ಲ',
       'searching_pumps': 'ಇಂಡಿಯನ್ ಆಯಿಲ್ ಪಂಪ್‌ಗಳನ್ನು ಹುಡುಕಲಾಗುತ್ತಿದೆ...',
@@ -475,6 +593,33 @@ class LocalizationProvider extends ChangeNotifier {
       'job_label': 'ಟ್ರಿಪ್',
       'label_start': 'ಪ್ರಾರಂಭಿಸಿ',
       'label_end': 'ಅಂತ್ಯ',
+      'bill_image_opt': 'ಬಿಲ್ ಚಿತ್ರ (ಐಚ್ಛಿಕ)',
+      'bill_image_req': 'ಬಿಲ್ ಚಿತ್ರ (ಕಡ್ಡಾಯ)',
+      'camera': 'ಕ್ಯಾಮೆರಾ',
+      'gallery': 'ಗ್ಯಾಲರಿ',
+      'bill_required_error': 'ಈ ವೆಚ್ಚಕ್ಕೆ ಬಿಲ್ ಚಿತ್ರ ಅಗತ್ಯವಿದೆ',
+      'delete_expense': 'ವೆಚ್ಚವನ್ನು ಅಳಿಸಿ',
+      'delete_expense_confirm': 'ನೀವು ಖಂಡಿತವಾಗಿಯೂ ಈ ವೆಚ್ಚವನ್ನು ಅಳಿಸಲು ಬಯಸುವಿರಾ?',
+      'expense_deleted': 'ವೆಚ್ಚವನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಅಳಿಸಲಾಗಿದೆ',
+      'delete': 'ಅಳಿಸಿ',
+      'cancel': 'ರದ್ದು',
+      // Driver Switch
+      'switch_driver_title': 'ಚಾಲಕನನ್ನು ಬದಲಾಯಿಸುವುದೇ?',
+      'switch_driver_content': 'ನೀವು ಚಾಲನಾ ಕರ್ತವ್ಯಗಳನ್ನು ಹಸ್ತಾಂತರಿಸಲು ಬಯಸುವಿರಾ? ಸಹ-ಚಾಲಕರಿಗೆ OTP ಕಳುಹಿಸಲಾಗುತ್ತದೆ.',
+      'verify_codriver_title': 'ಸಹ-ಚಾಲಕ ಪರಿಶೀಲಿಸಿ',
+      'enter_otp_label': 'OTP ನಮೂದಿಸಿ',
+      'verify_switch_btn': 'ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಬದಲಿಸಿ',
+      'driver_switched_success': 'ಚಾಲಕ ಯಶಸ್ವಿಯಾಗಿ ಬದಲಾಗಿದೆ!',
+      'invalid_otp': 'ತಪ್ಪಾದ OTP',
+      'switch_verification_failed': 'ಪರಿಶೀಲನೆ ವಿಫಲವಾಗಿದೆ',
+      'you_are_driving': 'ನೀವು ಚಾಲನೆ ಮಾಡುತ್ತಿದ್ದೀರಿ',
+      'passenger_codriver': 'ಪ್ರಯಾಣಿಕ / ಸಹ-ಚಾಲಕ',
+      'switch_btn': 'ಬದಲಿ',
+      'send_otp': 'OTP ಕಳುಹಿಸಿ',
+      'failed_request_switch': 'ಬದಲಾವಣೆ ವಿನಂತ ವಿಫಲವಾಗಿದೆ',
+      'take_over_title': 'ನಿಯಂತ್ರಣ ತೆಗೆದುಕೊಳ್ಳುವುದೇ?',
+      'take_over_content': 'ಚಾಲನಾ ಕರ್ತವ್ಯಗಳನ್ನು ತೆಗೆದುಕೊಳ್ಳುವುದೇ? ಪ್ರಸ್ತುತ ಚಾಲಕರಿಗೆ OTP ಕಳುಹಿಸಲಾಗುತ್ತದೆ.',
+      'take_over_btn': 'ತೆಗೆದುಕೊಳ್ಳಿ',
     },
     'ta': { // Tamil
       'login_title': 'Drivara Driver',
@@ -547,6 +692,8 @@ class LocalizationProvider extends ChangeNotifier {
       'etype_Food': 'உணவு',
       'etype_Other': 'மற்றவை',
       'etype_Parking': 'பார்க்கிங்',
+      'etype_Fuel Expense': 'எரிபொருள் செலவு',
+      'etype_FASTag Expense': 'பாஸ்டேக் செலவு',
       // Active Job Page
       'vehicle_location_unknown': 'வாகன இருப்பிடம் தெரியவில்லை',
       'searching_pumps': 'இந்தியன் ஆயில் பம்புகளைத் தேடுகிறது...',
@@ -564,10 +711,169 @@ class LocalizationProvider extends ChangeNotifier {
       'job_label': 'பயணம்',
       'label_start': 'தொடக்கம்',
       'label_end': 'முடிவு',
+      'bill_image_opt': 'பில் படம் (விருப்பத்தேர்வு)',
+      'bill_image_req': 'பில் படம் (கட்டாயம்)',
+      'camera': 'கேமரா',
+      'gallery': 'கேலரி',
+      'bill_required_error': 'இந்த செலவிற்கு பில் படம் அவசியம்',
+      'delete_expense': 'செலவை நீக்கு',
+      'delete_expense_confirm': 'இந்தச் செலவை நிச்சயமாக நீக்க விரும்புகிறீர்களா?',
+      'expense_deleted': 'செலவு வெற்றிகரமாக நீக்கப்பட்டது',
+      'delete': 'நீக்கு',
+      'cancel': 'ரத்து',
+      // Driver Switch
+      'switch_driver_title': 'ஓட்டுநரை மாற்றவா?',
+      'switch_driver_content': 'ஓட்டுநர் பொறுப்பை மாற்ற விரும்புகிறீர்களா? இணை ஓட்டுநருக்கு OTP அனுப்பப்படும்.',
+      'verify_codriver_title': 'இணை ஓட்டுநரை சரிபார்க்கவும்',
+      'enter_otp_label': 'OTP உள்ளிடவும்',
+      'verify_switch_btn': 'சரிபார்த்து மாற்றவும்',
+      'driver_switched_success': 'ஓட்டுநர் வெற்றிகரமாக மாற்றப்பட்டார்!',
+      'invalid_otp': 'தவறான OTP',
+      'switch_verification_failed': 'சரிபார்ப்பு தோல்வியடைந்தது',
+      'you_are_driving': 'நீங்கள் ஓட்டுகிறீர்கள்',
+      'passenger_codriver': 'பயணி / இணை ஓட்டுநர்',
+      'switch_btn': 'மாற்று',
+      'send_otp': 'OTP அனுப்பு',
+      'failed_request_switch': 'மாற்றக் கோரிக்கை தோல்வியடைந்தது',
+      'take_over_title': 'பொறுப்பேற்கவா?',
+      'take_over_content': 'ஓட்டுநர் பொறுப்பை ஏற்கவா? தற்போதைய ஓட்டுநருக்கு OTP அனுப்பப்படும்.',
+      'take_over_btn': 'பொறுப்பேற்க',
     },
   };
 
+  // Dynamic translation cache
+  final Map<String, String> _dynamicCache = {};
+  final TranslationService _translationService = TranslationService();
+
+  // Colloquial Dictionary for Logistics Terms (Manual Overrides for Better Quality)
+  final Map<String, Map<String, String>> _colloquialDictionary = {
+     // Unloading
+     'unloading expense': {
+        'hi': 'उतराई',
+        'te': 'అన్లోడింగ్ ఖర్చులు', // Unloading Kharchulu
+        'ta': 'இறக்கு செலவு', // Irakku Selavu (Requested)
+        'kn': 'ಅನ್‌ಲೋಡಿಂಗ್ ವೆಚ್ಚ',
+        'ml': 'ഇറക്ക് കൂലി' // Irakku kooli
+     },
+     'unloading charges': {
+        'hi': 'उतराई शुल्क',
+        'te': 'అన్లోడింగ్ ఛార్జీలు',
+        'ta': 'இறக்கு கூலி', 
+        'kn': 'ಅನ್‌ಲೋಡಿಂಗ್ ಶುಲ್ಕ',
+        'ml': 'ഇറക്ക് കൂലി'
+     },
+     // Loading
+     'loading expense': {
+        'hi': 'लदाई',
+        'te': 'లోడింగ్ ఖర్చులు',
+        'ta': 'ஏற்று கூலி', // Yetru kooli
+        'kn': 'ಲೋಡಿಂಗ್ ವೆಚ್ಚ',
+        'ml': 'കയറ്റുകൂലി' // Kayattu kooli
+     },
+     // Official/Bribe (Common in logistics)
+     'rto': {'hi': 'आरटीओ', 'ta': 'RTO', 'te': 'RTO', 'kn': 'RTO', 'ml': 'RTO'},
+     'police': {'hi': 'पुलिस', 'ta': 'போலீஸ்', 'te': 'పోలీసు', 'kn': 'ಪೊಲೀಸ್', 'ml': 'പോലീസ്'},
+     'border': {'hi': 'बॉर्डर', 'ta': 'எல்லை', 'te': 'సరిహద్దు', 'kn': 'ಗಡಿ', 'ml': 'അതിർത്തി'},
+     'entry tax': {
+        'hi': 'प्रवेश कर', 
+        'ta': 'நுழைவு வரி', 
+        'te': 'ప్రవేశ పన్ను',
+        'kn': 'ಪ್ರವೇಶ ತೆರಿಗೆ',
+        'ml': 'എൻട്രി ടാക്സ്'
+     },
+     'rto expense': {
+        'hi': 'आरटीओ खर्चा',
+        'te': 'RTO ఖర్చులు',
+        'ta': 'RTO செலவு', 
+        'kn': 'RTO ವೆಚ್ಚ',
+        'ml': 'RTO ചെലവ്'
+     },
+     // Misc
+     'tea': {'hi': 'चाय', 'ta': 'தேநீர்', 'te': 'టీ', 'kn': 'ಚಹಾ', 'ml': 'ചായ'},
+     'courier charges': {
+        'hi': 'कुरियर शुल्क',
+        'ta': 'கூரியர் செலவு',
+        'te': 'కొరియర్ ఛార్జీలు',
+        'kn': 'ಕೊರಿಯರ್ ಶುಲ್ಕ',
+        'ml': 'കൊറിയർ ചാർജ്'
+     }
+  };
+  
+  // Colloquial Suffixes for "Expense"
+  final Map<String, String> _expenseSuffixes = {
+    'hi': 'खर्चा',
+    'te': 'ఖర్చులు',
+    'ta': 'செலவு',
+    'kn': 'ವೆಚ್ಚ',
+    'ml': 'ചെലവ്',
+  };
+
   String t(String key) {
-    return _localizedStrings[_locale.languageCode]?[key] ?? key;
+    if (_localizedStrings[_locale.languageCode]!.containsKey(key)) {
+      return _localizedStrings[_locale.languageCode]![key]!;
+    }
+    return key;
+  }
+
+  // Handle dynamic content (like new expense types)
+  String translateDynamic(String text) {
+    // 1. Check if we have a static mapping for this text (e.g. 'etype_Fuel' -> 'Fuel')
+    // We try to construct a key 'etype_$text' just in case it matches a static key
+    String normalizedText = text.trim();
+    String staticKey = 'etype_$normalizedText';
+    if (_localizedStrings[_locale.languageCode]!.containsKey(staticKey)) {
+      return _localizedStrings[_locale.languageCode]![staticKey]!;
+    }
+
+    // 1b. Check Colloquial Dictionary (Robust overrides for logistics terms)
+    final lowerText = normalizedText.toLowerCase();
+    if (_colloquialDictionary.containsKey(lowerText)) {
+       final dict = _colloquialDictionary[lowerText];
+       if (dict != null && dict.containsKey(_locale.languageCode)) {
+          return dict[_locale.languageCode]!;
+       }
+    }
+
+    // 2. If English, return as is
+    if (_locale.languageCode == 'en') return text;
+
+    // 3. New Generic Suffix Logic (e.g. "XYZ Expense" -> "XYZ Selavu")
+    if (lowerText.endsWith(' expense')) {
+       final prefix = text.substring(0, text.length - 8).trim(); // Remove " Expense"
+       if (prefix.isNotEmpty && _expenseSuffixes.containsKey(_locale.languageCode)) {
+          final suffix = _expenseSuffixes[_locale.languageCode];
+          // Recursively translate prefix (in case it is "Loading" etc)
+          // But ensure we don't loop forever. Prefix "Loading" -> "Loading" dynamic -> "Yetru kooli"
+          final translatedPrefix = translateDynamic(prefix); 
+          
+          // Construct the colloquial string
+          // For Indian languages, usually "Prefix Suffix" (e.g. RTO Selavu)
+          return '$translatedPrefix $suffix';
+       }
+    }
+
+    // 4. Check dynamic cache
+
+    final cacheKey = '${_locale.languageCode}_$text';
+    if (_dynamicCache.containsKey(cacheKey)) {
+      return _dynamicCache[cacheKey]!;
+    }
+
+    // 5. Trigger background translation and return original temporarily
+    _translateInBackground(text, _locale.languageCode);
+    
+    return text;
+  }
+
+  Future<void> _translateInBackground(String text, String targetLang) async {
+    final cacheKey = '${targetLang}_$text';
+    // Use a temporary lock mechanism or check if already translating could be added, 
+    // but for simplicity we just allow redundant calls (ML Kit handles them fast).
+    
+    final translated = await _translationService.translate(text, targetLang);
+    if (translated != text) {
+      _dynamicCache[cacheKey] = translated;
+      notifyListeners(); // Refresh UI once translation is ready
+    }
   }
 }

@@ -21,49 +21,62 @@ class JobStreamService {
   }
 
   void _startStream() async {
-    if (_isClosed) return;
-    
-    _client = http.Client();
-    final token = await ApiConfig.getAuthToken();
-    // Use the driver-specific streaming endpoint
-    final url = Uri.parse('${ApiConfig.baseUrl}/driver/jobs/$jobId/tracking/stream');
+    int retryCount = 0;
+    while (!_isClosed) {
+      if (retryCount > 0) {
+        debugPrint("Reconnecting to stream in 3s... (Attempt $retryCount)");
+        await Future.delayed(const Duration(seconds: 3));
+      }
+      if (_isClosed) break;
 
-    try {
-      debugPrint("Connecting to stream: $url");
-      final request = http.Request('GET', url);
-      request.headers['Authorization'] = 'Bearer $token';
-      request.headers['Accept'] = 'text/event-stream';
-
-      final response = await _client!.send(request);
-
-      if (response.statusCode != 200) {
-        debugPrint("Stream failed: ${response.statusCode}");
-        _controller?.addError("Stream failed: ${response.statusCode}");
-        return;
+      _client = http.Client();
+      final token = await ApiConfig.getAuthToken();
+      if (token == null) {
+         debugPrint("JobStreamService: Token is null, waiting...");
+         await Future.delayed(const Duration(seconds: 2));
+         continue;
       }
 
-      response.stream
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen((line) {
-          if (line.startsWith('data:')) {
-             final data = line.substring(5).trim();
-             if (data == '"ok"' || data == '"keep-alive"') return;
-             try {
-                final json = jsonDecode(data);
-                _controller?.add(json);
-             } catch (e) {
-                // debugPrint("Stream Parse Error: $e");
-             }
-          }
-        }, onError: (e) {
-           debugPrint("Stream Error: $e");
-           _controller?.addError(e);
-        });
+      final url = Uri.parse('${ApiConfig.baseUrl}/driver/jobs/$jobId/tracking/stream');
 
-    } catch (e) {
-      debugPrint("Stream Connection Error: $e");
-      if (!_isClosed) _controller?.addError(e);
+      try {
+        debugPrint("Connecting to stream: $url");
+        final request = http.Request('GET', url);
+        request.headers['Authorization'] = 'Bearer $token';
+        request.headers['Accept'] = 'text/event-stream';
+
+        final response = await _client!.send(request);
+
+        if (response.statusCode != 200) {
+          debugPrint("Stream connection failed: ${response.statusCode}");
+          // Don't crash, just retry
+          retryCount++;
+          continue;
+        }
+
+        // Reset retry count on successful connection
+        retryCount = 0;
+
+        await for (final line in response.stream.transform(utf8.decoder).transform(const LineSplitter())) {
+            if (_isClosed) break;
+            if (line.startsWith('data:')) {
+               final data = line.substring(5).trim();
+               if (data == '"ok"' || data == '"keep-alive"') continue;
+               try {
+                  final json = jsonDecode(data);
+                  if (!_controller!.isClosed) _controller?.add(json);
+               } catch (e) {
+                  // Ignore parse errors
+               }
+            }
+        }
+      } catch (e) {
+        debugPrint("Stream Disconnected: $e");
+        // Loop will continue and retry
+        retryCount++;
+      } finally {
+        _client?.close();
+      }
     }
   }
 

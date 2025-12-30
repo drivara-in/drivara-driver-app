@@ -155,7 +155,7 @@ class _LiveJobMapState extends State<LiveJobMap> {
         
         // If we Just cleared fuel stations (refit=true but no stations), force snap back
         bool stationsCleared = refitBounds && (widget.fuelStations == null || widget.fuelStations!.isEmpty);
-        _updateCamera(vehiclePos, heading, force: stationsCleared);
+        updateVehicleLocation(vehiclePos, heading, force: stationsCleared);
       }
     }
 
@@ -252,7 +252,7 @@ class _LiveJobMapState extends State<LiveJobMap> {
   // --- State ---
   bool _following = true; // Auto-follow by default
 
-  Future<void> _updateCamera(LatLng pos, double heading, {bool force = false}) async {
+  Future<void> updateVehicleLocation(LatLng pos, double heading, {bool force = false}) async {
     // If not following (User panned or Overview mode), do not update camera automatically
     if (!_following && !force) {
        _lastVehiclePos = pos;
@@ -294,7 +294,7 @@ class _LiveJobMapState extends State<LiveJobMap> {
 
     // User requested "Recenter should be made" -> Snap to vehicle immediately
     if (_lastVehiclePos != null) {
-        _updateCamera(_lastVehiclePos!, _lastHeading, force: true);
+        updateVehicleLocation(_lastVehiclePos!, _lastHeading, force: true);
     }
     
     // Optionally we could fit bounds if vehicle is huge distance away, but user asked for Recenter.
@@ -314,14 +314,14 @@ class _LiveJobMapState extends State<LiveJobMap> {
      _parseJobData();
      
      if (_lastVehiclePos != null) {
-         _updateCamera(_lastVehiclePos!, _lastHeading, force: true);
+         updateVehicleLocation(_lastVehiclePos!, _lastHeading, force: true);
      }
   }
 
   void recenter() {
      setState(() => _following = true);
      if (_lastVehiclePos != null) {
-         _updateCamera(_lastVehiclePos!, _lastHeading, force: true);
+         updateVehicleLocation(_lastVehiclePos!, _lastHeading, force: true);
      }
   }
 

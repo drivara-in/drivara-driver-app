@@ -14,6 +14,7 @@ import 'providers/theme_provider.dart';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -59,6 +60,14 @@ class DrivaraApp extends StatelessWidget {
         '/permissions': (context) => const PermissionsPage(),
         '/home': (context) => const HomeRedirector(),
       },
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('en', ''), // English
+      ],
     );
   }
 }

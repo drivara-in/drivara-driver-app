@@ -314,12 +314,22 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
   }
 
   void _showExpenseSheet() {
+      LatLng? loc;
+      final vehicle = _dashboardData?['vehicle'];
+      if (vehicle != null && vehicle['location'] != null) {
+          final l = vehicle['location'];
+          if (l['lat'] != null && l['lng'] != null) {
+             loc = LatLng((l['lat'] as num).toDouble(), (l['lng'] as num).toDouble());
+          }
+      }
+
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (context) => AddExpenseSheet(
            job: _job,
+           currentLocation: loc,
            onSuccess: _fetchDashboardData, // refresh balances
         ),
       );
@@ -332,6 +342,111 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
         backgroundColor: Colors.transparent,
         builder: (context) => ExpenseListSheet(job: _job),
       );
+  }
+
+  void _showSwitchDriverDialog(bool isCurrentDriver) async {
+     final t = Provider.of<LocalizationProvider>(context, listen: false);
+     // 1. Confirm Intent
+     final confirm = await showDialog<bool>(
+       context: context, 
+       builder: (ctx) => AlertDialog(
+         title: Text(isCurrentDriver ? t.t('switch_driver_title') : t.t('take_over_title')),
+         content: Text(isCurrentDriver ? t.t('switch_driver_content') : t.t('take_over_content')),
+         actions: [
+           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(t.t('cancel'))),
+           TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(t.t('send_otp'))),
+         ],
+       )
+     );
+
+     if (confirm != true) return;
+
+     setState(() => _isActionLoading = true);
+     try {
+        // 2. Request OTP
+        debugPrint("Requesting switch for job ${_job['id']}");
+        final res = await ApiConfig.dio.post('/driver/jobs/${_job['id']}/switch/request');
+        
+        if (!mounted) return;
+        setState(() => _isActionLoading = false);
+
+        if (res.data['ok'] == true) {
+           _showOtpInput(res.data['message']); // Message from server might be dynamic, keep as is or translate if static
+        } else {
+           final t = Provider.of<LocalizationProvider>(context, listen: false);
+           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res.data['message'] ?? t.t('failed_request_switch'))));
+        }
+     } catch (e) {
+        if (mounted) {
+           setState(() => _isActionLoading = false);
+           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+        }
+     }
+  }
+
+  void _showOtpInput(String message) {
+     final t = Provider.of<LocalizationProvider>(context, listen: false);
+     final TextEditingController _otpCtrl = TextEditingController();
+     showDialog(
+       context: context,
+       barrierDismissible: false,
+       builder: (ctx) => AlertDialog(
+         title: Text(t.t('verify_codriver_title')),
+         content: Column(
+           mainAxisSize: MainAxisSize.min,
+           children: [
+             Text(message, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+             const SizedBox(height: 16),
+             TextField(
+               controller: _otpCtrl,
+               keyboardType: TextInputType.number,
+               maxLength: 6,
+               decoration: InputDecoration(
+                 labelText: t.t('enter_otp_label'),
+                 border: const OutlineInputBorder(),
+               ),
+             ),
+           ],
+         ),
+         actions: [
+           TextButton(onPressed: () => Navigator.pop(ctx), child: Text(t.t('cancel'))),
+           ElevatedButton(
+             onPressed: () async {
+                final code = _otpCtrl.text.trim();
+                if (code.length < 4) return;
+                
+                Navigator.pop(ctx); // Close dialog
+                _verifySwitch(code);
+             }, 
+             child: Text(t.t('verify_switch_btn'))
+           )
+         ],
+       )
+     );
+  }
+
+  Future<void> _verifySwitch(String code) async {
+     setState(() => _isLoading = true);
+     final t = Provider.of<LocalizationProvider>(context, listen: false);
+     try {
+        final res = await ApiConfig.dio.post('/driver/jobs/${_job['id']}/switch/confirm', data: {'code': code});
+        if (res.data['ok'] == true) {
+           if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.t('driver_switched_success'))));
+              _fetchDashboardData();
+           }
+        } else {
+           if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res.data['message'] ?? t.t('invalid_otp'))));
+        }
+     } catch (e) {
+        String msg = t.t('switch_verification_failed');
+        if (e is DioException && e.response?.data != null && e.response!.data['message'] != null) {
+           msg = e.response!.data['message'];
+        }
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+     } finally {
+        if (mounted) setState(() => _isLoading = false);
+     }
   }
 
   @override
@@ -584,9 +699,13 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                       ]
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: SingleChildScrollView(
-                      controller: scrollController,
-                      physics: const ClampingScrollPhysics(),
+                    child: RefreshIndicator(
+                      onRefresh: _fetchDashboardData,
+                      color: AppColors.primary,
+                      backgroundColor: Theme.of(context).cardTheme.color,
+                      child: SingleChildScrollView(
+                        controller: scrollController,
+                        physics: const AlwaysScrollableScrollPhysics(),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -604,33 +723,98 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                            Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Expanded(
-                                  child: Text(
-                                    _job['title'] ?? '${t.t('job_label')} #${_job['id']}', 
-                                    style: AppTextStyles.header.copyWith(fontSize: 24, color: Theme.of(context).textTheme.bodyLarge?.color),
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 2,
-                                  ),
-                              ),
-                              const SizedBox(width: 12),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                    color: Theme.of(context).cardTheme.color,
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(color: Theme.of(context).dividerColor)
-                                ),
-                                child: Row(
-                                    mainAxisSize: MainAxisSize.min,
+                               Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                        const Icon(Icons.stars, color: Colors.amber, size: 16),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                            t.t('primary_driver'), 
-                                            style: AppTextStyles.label.copyWith(fontWeight: FontWeight.w600, color: Theme.of(context).textTheme.bodyMedium?.color),
-                                        ),
-                                    ]
-                                ),
+                                      Text(
+                                        _job['title'] ?? '${t.t('job_label')} #${_job['id']}', 
+                                        style: AppTextStyles.header.copyWith(fontSize: 24, color: Theme.of(context).textTheme.bodyLarge?.color),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 2,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      // Driver Status Row
+                                      FutureBuilder<String?>(
+                                        future: ApiConfig.getDriverId(),
+                                        builder: (context, snapshot) {
+                                           if (!snapshot.hasData) return const SizedBox.shrink();
+                                           
+                                           // Verify job data
+                                           debugPrint("JOB DATA [switch_ui]: driver=${_job['driver_id']}, sec=${_job['secondary_driver_id']}, cur=${_job['current_driver_id']}, myId=${snapshot.data}");
+                                           // Only show if there is a co-driver (Commented out for debugging/freedom)
+                                           // if (_job['secondary_driver_id'] == null) return const SizedBox.shrink();
+
+                                           final myId = snapshot.data;
+                                           final currentDriverId = _job['current_driver_id'] ?? _job['driver_id']; // Default to primary if null
+                                           final isDriving = myId == currentDriverId;
+                                           
+                                           // Determine current driver name
+                                           String currentDriverName = '';
+                                           if (currentDriverId == _job['secondary_driver_id']) {
+                                              currentDriverName = _job['secondary_driver_name'] ?? 'Co-Driver';
+                                           } else {
+                                              currentDriverName = _job['driver_name'] ?? 'Driver';
+                                           }
+
+                                           return Wrap(
+                                             spacing: 12,
+                                             runSpacing: 8,
+                                             crossAxisAlignment: WrapCrossAlignment.center,
+                                             children: [
+                                               Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                  decoration: BoxDecoration(
+                                                      color: isDriving ? Colors.green.withOpacity(0.1) : Colors.amber.withOpacity(0.1),
+                                                      borderRadius: BorderRadius.circular(20),
+                                                      border: Border.all(color: isDriving ? Colors.green : Colors.amber)
+                                                  ),
+                                                  child: Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                          Icon(Icons.local_shipping, color: isDriving ? Colors.green : Colors.amber, size: 16),
+                                                          const SizedBox(width: 6),
+                                                          Text(
+                                                              isDriving ? t.t('you_are_driving') : t.t('passenger_codriver'), 
+                                                              style: AppTextStyles.label.copyWith(
+                                                                fontWeight: FontWeight.w600, 
+                                                                color: isDriving ? Colors.green : Colors.amber
+                                                              ),
+                                                          ),
+                                                      ]
+                                                  ),
+                                                ),
+                                                InkWell(
+                                                  onTap: () => _showSwitchDriverDialog(isDriving),
+                                                  child: Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                    decoration: BoxDecoration(
+                                                       color: Theme.of(context).primaryColor.withOpacity(0.1),
+                                                       borderRadius: BorderRadius.circular(20),
+                                                       border: Border.all(color: Theme.of(context).primaryColor)
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize: MainAxisSize.min, // Ensure button also doesn't expand unnecessarily
+                                                      children: [
+                                                        Icon(Icons.swap_horiz, size: 16, color: Theme.of(context).primaryColor),
+                                                        const SizedBox(width: 4),
+                                                        Flexible( // Add Flexible to truncate text if button itself is too wide even on new line (rare but safe)
+                                                          child: Text(
+                                                            isDriving ? t.t('switch_btn') : t.t('take_over_btn'), 
+                                                            style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold, fontSize: 12),
+                                                            overflow: TextOverflow.ellipsis,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                )
+                                             ],
+                                           );
+                                        }
+                                      ),
+                                    ],
+                                  ),
                               ),
                              ],
                            ),
@@ -785,7 +969,8 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                             const SizedBox(height: 40), // Bottom padding
                         ],
                       ),
-                    )
+                    ),
+                  ),
                 );
               }
             ),
