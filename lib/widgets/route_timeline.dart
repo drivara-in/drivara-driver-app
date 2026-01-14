@@ -8,12 +8,17 @@ class RouteTimelineWidget extends StatelessWidget {
   final Color inactiveColor;
   final List<Map<String, dynamic>>? stops; // Optional stops data
 
+  final Function(int)? onStopTap;
+  final int? selectedStopIndex;
+
   const RouteTimelineWidget({
     super.key,
     required this.progress,
     required this.activeColor,
     required this.inactiveColor,
     this.stops,
+    this.onStopTap,
+    this.selectedStopIndex,
   });
 
   String _getStopLabel(int index) {
@@ -108,12 +113,13 @@ class RouteTimelineWidget extends StatelessWidget {
           children: [
             // Timeline with stops
             SizedBox(
-              height: 40,
+              height: 48, // Increased height for selection halo
               child: Stack(
+                clipBehavior: Clip.none,
                 children: [
                   // Background Line
                   Positioned(
-                    top: 17,
+                    top: 21, // Centered vertically (48/2 - 6/2)
                     left: halfMarker,
                     width: lineWidth,
                     child: Container(
@@ -126,7 +132,7 @@ class RouteTimelineWidget extends StatelessWidget {
                   ),
                   // Progress Line
                   Positioned(
-                    top: 17,
+                    top: 21,
                     left: halfMarker,
                     width: lineWidth * progress.clamp(0.0, 1.0),
                     child: Container( // Changed from AnimatedContainer to avoid layout jitter during internal width changes, or keep AnimatedContainer
@@ -141,40 +147,45 @@ class RouteTimelineWidget extends StatelessWidget {
                   ...List.generate(stopCount, (index) {
                     final stop = stops![index];
                     final activity = stop['activity'] as String?;
+                    final isSelected = selectedStopIndex == index;
                     
                     // 0.0 to 1.0 along the line
                     final t = stopCount > 1 ? index / (stopCount - 1) : 0.0;
-                    
-                    // Center of marker should be at: halfMarker + (lineWidth * t)
-                    // Left of marker should be: Center - halfMarker
-                    // => halfMarker + lineWidth * t - halfMarker 
-                    // => lineWidth * t
                     
                     final double leftPos = lineWidth * t;
                     
                     return Positioned(
                       left: leftPos, 
-                      top: 0,
-                      child: Column(
-                        children: [
-                          Container(
-                            width: markerSize,
-                            height: markerSize,
-                            decoration: BoxDecoration(
-                              color: _getActivityColor(activity),
-                              shape: BoxShape.circle,
-                              border: Border.all(
+                      top: 4, // Adjust for larger container
+                      child: GestureDetector(
+                        onTap: () {
+                           if (onStopTap != null) onStopTap!(index);
+                        },
+                        child: Column(
+                          children: [
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              width: isSelected ? 40 : markerSize,
+                              height: isSelected ? 40 : markerSize,
+                              decoration: BoxDecoration(
+                                color: _getActivityColor(activity),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isSelected ? Colors.white : Colors.white.withOpacity(0.8),
+                                  width: isSelected ? 4 : 2,
+                                ),
+                                boxShadow: isSelected ? [
+                                  BoxShadow(color: _getActivityColor(activity).withOpacity(0.5), blurRadius: 10, spreadRadius: 2)
+                                ] : null
+                              ),
+                              child: Icon(
+                                _getActivityIcon(activity),
+                                size: isSelected ? 20 : 16,
                                 color: Colors.white,
-                                width: 2,
                               ),
                             ),
-                            child: Icon(
-                              _getActivityIcon(activity),
-                              size: 16,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     );
                   }),
@@ -189,15 +200,21 @@ class RouteTimelineWidget extends StatelessWidget {
                 final stop = stops![index];
                 // final label = stop['label'] as String? ?? _getStopLabel(index);
                 final activity = stop['activity'] as String?;
+                final isSelected = selectedStopIndex == index;
                 
                 return Expanded(
-                  child: Text(
-                    _getStopLabel(index),
-                    textAlign: index == 0 ? TextAlign.start : (index == stopCount - 1 ? TextAlign.end : TextAlign.center),
-                    style: TextStyle(
-                      color: _getActivityColor(activity),
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
+                  child: InkWell(
+                    onTap: () {
+                       if (onStopTap != null) onStopTap!(index);
+                    },
+                    child: Text(
+                      _getStopLabel(index),
+                      textAlign: index == 0 ? TextAlign.start : (index == stopCount - 1 ? TextAlign.end : TextAlign.center),
+                      style: TextStyle(
+                        color: _getActivityColor(activity),
+                        fontSize: isSelected ? 12 : 10,
+                        fontWeight: isSelected ? FontWeight.w900 : FontWeight.bold,
+                      ),
                     ),
                   ),
                 );

@@ -30,17 +30,18 @@ class JobStreamService {
       if (_isClosed) break;
 
       _client = http.Client();
-      final token = await ApiConfig.getAuthToken();
-      if (token == null) {
-         debugPrint("JobStreamService: Token is null, waiting...");
-         await Future.delayed(const Duration(seconds: 2));
-         continue;
-      }
-
-      final url = Uri.parse('${ApiConfig.baseUrl}/driver/jobs/$jobId/tracking/stream');
-
+      
       try {
+        final token = await ApiConfig.getAuthToken();
+        if (token == null) {
+           debugPrint("JobStreamService: Token is null, waiting...");
+           await Future.delayed(const Duration(seconds: 2));
+           continue;
+        }
+
+        final url = Uri.parse('${ApiConfig.baseUrl}/driver/jobs/$jobId/tracking/stream');
         debugPrint("Connecting to stream: $url");
+        
         final request = http.Request('GET', url);
         request.headers['Authorization'] = 'Bearer $token';
         request.headers['Accept'] = 'text/event-stream';
@@ -49,7 +50,6 @@ class JobStreamService {
 
         if (response.statusCode != 200) {
           debugPrint("Stream connection failed: ${response.statusCode}");
-          // Don't crash, just retry
           retryCount++;
           continue;
         }
@@ -71,8 +71,7 @@ class JobStreamService {
             }
         }
       } catch (e) {
-        debugPrint("Stream Disconnected: $e");
-        // Loop will continue and retry
+        debugPrint("Stream Disconnected/Error: $e");
         retryCount++;
       } finally {
         _client?.close();

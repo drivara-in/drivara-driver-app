@@ -11,6 +11,7 @@ import 'package:lottie/lottie.dart';
 import 'package:drivara_driver_app/widgets/route_timeline.dart';
 import 'package:drivara_driver_app/widgets/add_expense_sheet.dart';
 import 'package:drivara_driver_app/widgets/expense_list_sheet.dart';
+import 'package:drivara_driver_app/widgets/stop_completion_sheet.dart';
 import 'api_config.dart';
 import 'providers/localization_provider.dart';
 import 'no_job_page.dart';
@@ -19,7 +20,16 @@ import 'theme/app_theme.dart';
 import 'providers/theme_provider.dart';
 import 'services/job_stream_service.dart';
 import 'services/find_fuel_service.dart';
+import 'services/notification_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+double get kAllowedActionRadiusKm {
+  final val = dotenv.env['ALLOWED_ACTION_RADIUS_KM'];
+  if (val != null) {
+     return double.tryParse(val) ?? 75.0;
+  }
+  return 75.0;
+}
 
 class ActiveJobPage extends StatefulWidget {
   final Map<String, dynamic> job;
@@ -36,13 +46,33 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
   bool _isActionLoading = false;
   List<Map<String, dynamic>>? _fuelStations;
 
+  // Reminder State
+  Timer? _stopCheckTimer;
+  DateTime? _stoppedSince;
+  bool _reminderSent = false;
+
+
   JobStreamService? _streamService;
   StreamSubscription? _streamSubscription;
   final GlobalKey<dynamic> _mapKey = GlobalKey(); // Using dynamic to access state methods loosely or type it if possible
+  
+  // Manual Selection State
+  int? _selectedStopIndex;
+
+  void _onStopTimelineTap(int index) {
+     setState(() {
+        if (_selectedStopIndex == index) {
+           _selectedStopIndex = null; // Toggle off
+        } else {
+           _selectedStopIndex = index;
+        }
+     });
+  }
 
   @override
   void initState() {
     super.initState();
+    NotificationService().init();
     _job = widget.job;
     // Initial fetch for loading state
     _fetchDashboardData().then((_) {
@@ -76,6 +106,75 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
            };
            vehicle['speed_kmh'] = data['speed'] ?? 0;
            vehicle['odometer_km'] = data['odometer'] ?? vehicle['odometer_km'];
+
+           // --- Reminder Logic ---
+           try {
+              final double speed = (data['speed'] as num?)?.toDouble() ?? 0.0;
+              final bool? ignition = data['ignition'] as bool?;
+              final List actions = data['available_actions'] ?? [];
+
+              // User definition: Stopped = Ignition OFF
+              // Strictly check ignition. 
+              bool isStopped = (ignition == false);
+
+              if (isStopped && actions.isNotEmpty) {
+                  final action = actions.first;
+                  // Distance Check
+                  bool withinRadius = false;
+                  try { 
+                      final stopIdx = action['stopIndex'];
+                      if (stopIdx != null) {
+                           // Ensure stops is a list
+                           var stops = _job['route_stops'];
+                           if (stops is String) {
+                               // JSON decode if needed, though _job usually has objects if passed from parent
+                           }
+                           // Assuming normalized structure in _job
+                           final stopsList = (stops as List?) ?? [];
+                           
+                           if (stopIdx < stopsList.length) {
+                               final stop = stopsList[stopIdx];
+                               final double vLat = vehicle['location']['lat'] ?? 0.0;
+                               final double vLng = vehicle['location']['lng'] ?? 0.0;
+                               final double sLat = double.tryParse(stop['lat'].toString()) ?? 0.0;
+                               final double sLng = double.tryParse(stop['lng'].toString()) ?? 0.0;
+                               
+                               final dist = _getHaversineDistance(vLat, vLng, sLat, sLng);
+                               if (dist <= kAllowedActionRadiusKm) {
+                                   withinRadius = true;
+                               }
+                           }
+                      }
+                  } catch (e) {
+                      debugPrint("Reminder Dist Check Error: $e");
+                  }
+
+                  if (withinRadius) {
+                      _stoppedSince ??= DateTime.now();
+                      
+                      final duration = DateTime.now().difference(_stoppedSince!);
+                      if (duration.inMinutes >= 5 && !_reminderSent) {
+                           final String actionLabel = action['label'] ?? 'Status';
+                           NotificationService().showNotification(
+                               id: 888,
+                               title: "Action Required: $actionLabel",
+                               body: "Ignition is OFF. Please tap '$actionLabel' to update."
+                           );
+                           _reminderSent = true;
+                      }
+                  } else {
+                      _stoppedSince = null; // Reset if outside radius
+                      _reminderSent = false;
+                  }
+              } else {
+                   // Reset if moving / ignition ON
+                   _stoppedSince = null;
+                   _reminderSent = false;
+              }
+           } catch (e) {
+               debugPrint("Reminder Error: $e");
+           }
+           // ---------------------
            
            // Robust parsing for Int gauges
            if (data['fuel_level'] != null) {
@@ -97,7 +196,10 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
            // If we have distance left, update it
            if (data['distanceLeftKm'] != null) {
               route['distance_remaining_km'] = data['distanceLeftKm'];
-              // Simple ETA recalc if needed or trust server stream eventually
+           }
+           
+           if (data['available_actions'] != null) {
+              route['available_actions'] = data['available_actions'];
            }
 
            // Re-assign to trigger UI update
@@ -139,20 +241,69 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
     }
   }
 
-  Future<void> _updateStatus(String action) async {
+  Future<void> _updateStatus(String action, {Map<String, dynamic>? body}) async {
+    // If complete_action or depart, we might need POD.
+    // Check if stopIndex is available to identify the stop type.
+    if (['complete_action', 'depart'].contains(action) && body != null && body['stopIndex'] != null) {
+        final stopIndex = body['stopIndex'] as int;
+        // Fetch stop details from local state
+        final stops = (_job['route_stops'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        if (stopIndex < stops.length) {
+            final stop = stops[stopIndex];
+            // Show Sheet
+            await showModalBottomSheet(
+                context: context, 
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (ctx) => StopCompletionSheet(
+                    stop: stop, 
+                    stopIndex: stopIndex, 
+                    onSubmit: (fileId, notes) {
+                        // Pass to actual API call
+                        final newBody = Map<String, dynamic>.from(body);
+                        if (fileId != null) newBody['pod_upload_id'] = fileId;
+                        if (notes != null && notes.isNotEmpty) newBody['pod_notes'] = notes;
+                        _performUpdateStatus(action, body: newBody);
+                    }
+                )
+            );
+            return; // Wait for sheet callback
+        }
+    }
+
+    // Default path
+    await _performUpdateStatus(action, body: body);
+  }
+
+  Future<void> _performUpdateStatus(String action, {Map<String, dynamic>? body}) async {  
     setState(() => _isActionLoading = true);
     try {
-      final response = await ApiConfig.dio.post('/driver/jobs/${_job['id']}/$action');
+      debugPrint("Updating status: $action with body $body");
+      final response = await ApiConfig.dio.post(
+          '/driver/jobs/${_job['id']}/$action',
+          data: body 
+      );
+      
       if (!mounted) return;
+      setState(() => _isActionLoading = false);
+
       if (response.data['ok'] == true) {
-        if (action == 'complete') {
-           Navigator.of(context).pushAndRemoveUntil(
-             MaterialPageRoute(builder: (_) => const NoJobPage()), 
-             (route) => false
-           );
-        } else {
-          _fetchDashboardData(); // Refresh all data
-        }
+         String msg = "Status updated";
+         final t = Provider.of<LocalizationProvider>(context, listen: false);
+         
+         if (action == 'start') msg = t.t('job_started');
+         else if (action == 'complete') {
+             msg = t.t('job_completed');
+             Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const NoJobPage()));
+             return;
+         }
+         else if (action == 'reached') msg = t.t('location_reached');
+         else if (action == 'start_action') msg = t.t('loading_started'); 
+         else if (action == 'complete_action') msg = t.t('loading_completed');
+         else if (action == 'depart') msg = t.t('departed');
+
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green));
+         _fetchDashboardData(); 
       } else {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(response.data['message'] ?? "Action failed")));
       }
@@ -484,31 +635,9 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
     // 2. Calculate Distance Remaining (Priority: Haversine Corrected Server Value -> Calculated)
     double? direct = serverRemaining;
     
-    // Check Client-side Haversine (Crow Flies) check if Server Value is suspicious
-    final vLoc = vehicle['location']; // { lat: ..., lng: ... } 
-    final dLat = double.tryParse(_job['destination_latitude']?.toString() ?? '');
-    final dLng = double.tryParse(_job['destination_longitude']?.toString() ?? '');
-    
-    if (vLoc != null && vLoc['lat'] != null && vLoc['lng'] != null && dLat != null && dLng != null) {
-         final vLat = double.tryParse(vLoc['lat'].toString()) ?? 0;
-         final vLng = double.tryParse(vLoc['lng'].toString()) ?? 0;
-         
-         if (vLat != 0 && vLng != 0) {
-             final hDist = _getHaversineDistance(vLat, vLng, dLat, dLng);
-             
-             // If Direct (Server) is way larger than Haversine (e.g. stuck at start vs near end), prefer Haversine
-             // This fixes the issue where Server returns Total Route Distance as remaining.
-             if (direct == null || (direct > hDist + 50)) {
-                  direct = double.parse(hDist.toStringAsFixed(1));
-             }
-         }
-    }
-
-    if (direct != null) {
-        distanceRemaining = direct;
-    } else if (routeDistance != null && routeDistance > 0) {
-        distanceRemaining = (routeDistance - distanceCovered).clamp(0, double.infinity);
-    }
+     if (direct != null) {
+          distanceRemaining = direct;
+     }
 
     // 3. Calculate Progress
     final double effectiveTotal = distanceCovered + distanceRemaining;
@@ -742,8 +871,8 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                                            
                                            // Verify job data
                                            debugPrint("JOB DATA [switch_ui]: driver=${_job['driver_id']}, sec=${_job['secondary_driver_id']}, cur=${_job['current_driver_id']}, myId=${snapshot.data}");
-                                           // Only show if there is a co-driver (Commented out for debugging/freedom)
-                                           // if (_job['secondary_driver_id'] == null) return const SizedBox.shrink();
+                                           // Only show if there is a co-driver
+                                           if (_job['secondary_driver_id'] == null) return const SizedBox.shrink();
 
                                            final myId = snapshot.data;
                                            final currentDriverId = _job['current_driver_id'] ?? _job['driver_id']; // Default to primary if null
@@ -891,6 +1020,8 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                                            activeColor: AppColors.primary,
                                            inactiveColor: Theme.of(context).dividerColor,
                                            stops: (_job['route_stops'] as List?)?.cast<Map<String, dynamic>>(),
+                                           onStopTap: _onStopTimelineTap,
+                                           selectedStopIndex: _selectedStopIndex,
                                        ),
                                        
                                        const SizedBox(height: 10),
@@ -928,44 +1059,176 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                            ),
                            const SizedBox(height: 30),
 
-                           // Action Button
-                           if (!isStarted)
-                             ElevatedButton.icon(
-                                 onPressed: _isActionLoading ? null : () => _updateStatus('start'),
-                                 icon: const Icon(Icons.play_arrow),
-                                 label: Text(t.t('start_trip')),
-                                 style: AppTheme.darkTheme.elevatedButtonTheme.style!.copyWith(
-                                     backgroundColor: MaterialStateProperty.all(AppColors.success),
-                                 ),
-                             )
-                           else 
-                             Container(
-                                 width: double.infinity,
-                                 height: 56,
-                                 decoration: BoxDecoration(
-                                     gradient: LinearGradient(colors: [Colors.blue.shade900, Colors.blue.shade600]),
-                                     borderRadius: BorderRadius.circular(16),
-                                     boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))]
-                                 ),
-                                 child: Center(
-                                     child: Row(
-                                         mainAxisAlignment: MainAxisAlignment.center,
-                                         children: [
-                                             Lottie.network(
-                                               'https://lottie.host/98692795-0373-455f-8706-53867664871e/9R1k6e3v41.json', 
-                                               width: 40, 
-                                               height: 40,
-                                               errorBuilder: (context, error, stackTrace) => const Icon(Icons.trip_origin, color: Colors.white),
-                                             ),
-                                             const SizedBox(width: 8),
-                                             Text(
-                                                 t.t('trip_in_progress'),
-                                                 style: AppTextStyles.header.copyWith(fontSize: 16),
-                                             ),
-                                         ],
-                                     ),
-                                 ),
-                             ),
+                            // Action Buttons (Dynamic)
+                            if (!isStarted)
+                              ElevatedButton.icon(
+                                  onPressed: _isActionLoading ? null : () => _updateStatus('start'),
+                                  icon: const Icon(Icons.play_arrow),
+                                  label: Text(t.t('start_trip')),
+                                  style: AppTheme.darkTheme.elevatedButtonTheme.style!.copyWith(
+                                      backgroundColor: MaterialStateProperty.all(AppColors.success),
+                                  ),
+                              )
+                              else Builder(
+                                builder: (context) {
+                                   List<Map<String, dynamic>> actions = [];
+                                   bool isManual = false;
+                                   bool tooFar = false;
+                                   double distKm = 0;
+                                   String stopStatus = '';
+                                   Map<String, dynamic> stop = {};
+
+                                   final vehicle = _dashboardData?['vehicle'] ?? {};
+                                   final vLoc = vehicle['location'];
+
+                                   // 1. Manual Selection Override
+                                   if (_selectedStopIndex != null) {
+                                       isManual = true;
+                                       final stops = (_job['route_stops'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+                                       if (_selectedStopIndex! < stops.length) {
+                                           stop = stops[_selectedStopIndex!];
+                                           final status = stop['status'] ?? 'pending';
+                                           final type = stop['type'] ?? 'stop';
+                                           stopStatus = status;
+
+                                           // Calc Distance
+                                           if (vLoc != null && stop['lat'] != null && stop['lng'] != null) {
+                                               final vLat = double.tryParse(vLoc['lat'].toString()) ?? 0.0;
+                                               final vLng = double.tryParse(vLoc['lng'].toString()) ?? 0.0;
+                                               
+                                               if (vLat != 0 && vLng != 0) {
+                                                   // Support both lat/lng and latitude/longitude
+                                                   final sLat = double.tryParse(stop['lat'].toString()) ?? double.tryParse(stop['latitude'].toString()) ?? 0.0;
+                                                   final sLng = double.tryParse(stop['lng'].toString()) ?? double.tryParse(stop['longitude'].toString()) ?? 0.0;
+                                                   
+                                                   if (sLat != 0 && sLng != 0) {
+                                                        distKm = _getHaversineDistance(vLat, vLng, sLat, sLng);
+                                                        debugPrint("DISTANCE CHECK: Stop ${_selectedStopIndex} | V: $vLat,$vLng | S: $sLat,$sLng | Dist: $distKm");
+                                                        if (distKm > kAllowedActionRadiusKm) tooFar = true;
+                                                   }
+                                               }
+                                           }
+                                           
+                                           if (status == 'pending') {
+                                                // Always allow Reached
+                                                String label = 'Arrived';
+                                                if (type == 'loading') label = t.t('reached_loading_point') ?? 'Reached Loading Point';
+                                                else if (type == 'unloading') label = t.t('reached_unloading_point') ?? 'Reached Unloading Point';
+                                                
+                                                actions.add({'action': 'reached', 'label': label, 'stopIndex': _selectedStopIndex});
+                                           } else if (status == 'reached') {
+                                                if (type == 'loading' && stop['action_completed_at'] == null) {
+                                                    // Always allow Start Loading
+                                                    actions.add({'action': 'start_action', 'label': t.t('action_loading') ?? 'Load', 'stopIndex': _selectedStopIndex});
+                                                } else if (type == 'unloading' && stop['action_completed_at'] == null) {
+                                                    // Always allow Start Unloading
+                                                    actions.add({'action': 'start_action', 'label': t.t('action_unloading') ?? 'Unload', 'stopIndex': _selectedStopIndex});
+                                                } else {
+                                                    // Restriction applies to Depart
+                                                    if (!tooFar) {
+                                                        actions.add({'action': 'depart', 'label': t.t('action_departed') ?? 'Departed', 'stopIndex': _selectedStopIndex});
+                                                    }
+                                                }
+                                            } else if (status == 'action_in_progress') {
+                                                // Restriction applies to Complete (EPOD)
+                                                if (!tooFar) {
+                                                    String label = type == 'loading' ? (t.t('action_loaded') ?? 'Loaded') : (t.t('action_unloaded') ?? 'Unloaded');
+                                                    actions.add({'action': 'complete_action', 'label': label, 'stopIndex': _selectedStopIndex});
+                                                }
+                                            }
+                                       }
+                                   } else {
+                                       // 2. Default: SSE Data
+                                       actions = (_dashboardData?['route'] != null && _dashboardData!['route']['available_actions'] != null) 
+                                          ? (_dashboardData!['route']['available_actions'] as List).cast<Map<String, dynamic>>()
+                                          : <Map<String, dynamic>>[];
+                                   }
+                                   
+                                   if (actions.isNotEmpty) {
+                                       return Column(
+                                          children: [
+                                              if (isManual) 
+                                                Padding(
+                                                  padding: const EdgeInsets.only(bottom: 8.0),
+                                                  child: Text("Manual Control: Stop ${_selectedStopIndex! + 1}", style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+                                                ),
+                                              ...actions.map((act) {
+                                                  return Padding(
+                                                    padding: const EdgeInsets.only(bottom: 12.0),
+                                                    child: SizedBox(
+                                                      width: double.infinity,
+                                                      height: 56,
+                                                      child: ElevatedButton.icon(
+                                                          onPressed: _isActionLoading ? null : () {
+                                                             _updateStatus(act['action'], body: {'stopIndex': act['stopIndex'], 'force': isManual});
+                                                             if(isManual) setState(() => _selectedStopIndex = null);
+                                                          },
+                                                          icon: Icon(_getActionIcon(act['label'] ?? act['action']), size: 24),
+                                                          label: Text(act['label'] ?? act['action'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                                          style: AppTheme.darkTheme.elevatedButtonTheme.style!.copyWith(
+                                                              backgroundColor: MaterialStateProperty.all(isManual ? Colors.orange.shade800 : Colors.blue.shade800),
+                                                              shape: MaterialStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                                                          ),
+                                                      ),
+                                                    ),
+                                                  );
+                                              }).toList(),
+                                              if (isManual)
+                                                TextButton(
+                                                    onPressed: () => setState(() => _selectedStopIndex = null),
+                                                    child: const Text("Cancel / Auto Mode", style: TextStyle(color: Colors.grey))
+                                                )
+                                          ],
+                                       );
+                                   }
+
+                                   // Default "On Route" State
+                                   return Container(
+                                       width: double.infinity,
+                                       height: 56,
+                                       decoration: BoxDecoration(
+                                           gradient: LinearGradient(colors: [Colors.blue.shade900, Colors.blue.shade600]),
+                                           borderRadius: BorderRadius.circular(16),
+                                           boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))]
+                                       ),
+                                       child: Center(
+                                           child: Row(
+                                               mainAxisAlignment: MainAxisAlignment.center,
+                                               children: [
+                                                   if (_selectedStopIndex != null) ...[
+                                                        Icon(tooFar ? Icons.error_outline : Icons.info_outline, color: tooFar ? Colors.orangeAccent : Colors.white),
+                                                        const SizedBox(width: 8),
+                                                        Text(
+                                                            tooFar 
+                                                              ? "Distance: ${distKm.toStringAsFixed(1)} km > ${kAllowedActionRadiusKm.toStringAsFixed(0)} km\nYou are too far from the location."
+                                                              : "Stop ${_selectedStopIndex! + 1}: ${stopStatus.toUpperCase()}", 
+                                                            style: AppTextStyles.header.copyWith(fontSize: 16),
+                                                            textAlign: TextAlign.center,
+                                                        ),
+                                                        const SizedBox(width: 8),
+                                                        TextButton(
+                                                            onPressed: () => setState(() => _selectedStopIndex = null),
+                                                            child: const Text("Back", style: TextStyle(color: Colors.white70))
+                                                        )
+                                                   ] else ...[
+                                                       Lottie.network(
+                                                         'https://lottie.host/98692795-0373-455f-8706-53867664871e/9R1k6e3v41.json', 
+                                                         width: 40, 
+                                                         height: 40,
+                                                         errorBuilder: (context, error, stackTrace) => const Icon(Icons.trip_origin, color: Colors.white),
+                                                       ),
+                                                       const SizedBox(width: 8),
+                                                       Text(
+                                                           t.t('trip_in_progress'),
+                                                           style: AppTextStyles.header.copyWith(fontSize: 16),
+                                                       ),
+                                                   ]
+                                               ],
+                                           ),
+                                       ),
+                                   );
+                                }
+                              ),
                             const SizedBox(height: 40), // Bottom padding
                         ],
                       ),
@@ -1175,5 +1438,14 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
 
   double _toRadians(double degree) {
     return degree * math.pi / 180;
+  }
+  IconData _getActionIcon(String actionOrLabel) {
+    final lower = actionOrLabel.toLowerCase();
+    if (lower.contains('reach') || lower.contains('arrive')) return Icons.location_on;
+    if (lower.contains('start') || lower.contains('load') && !lower.contains('unload')) return Icons.upload; // Loading
+    if (lower.contains('unload')) return Icons.download;
+    if (lower.contains('depart')) return Icons.arrow_forward;
+    if (lower.contains('finish') || lower.contains('loaded') || lower.contains('unloaded')) return Icons.check_circle;
+    return Icons.play_arrow;
   }
 }

@@ -1,0 +1,55 @@
+Analyzing active_job_page.dart...                               
+
+warning • Duplicate import • lib/active_job_page.dart:4:8 • duplicate_import
+warning • Unused import: 'package:flutter_dotenv/flutter_dotenv.dart' • lib/active_job_page.dart:23:8 • unused_import
+   info • Statements in an if should be enclosed in a block • lib/active_job_page.dart:209:33 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/active_job_page.dart:215:40 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/active_job_page.dart:216:45 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/active_job_page.dart:217:48 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/active_job_page.dart:218:39 • curly_braces_in_flow_control_structures
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/active_job_page.dart:270:109 • deprecated_member_use
+   info • The local variable '_otpCtrl' starts with an underscore • lib/active_job_page.dart:455:34 • no_leading_underscores_for_local_identifiers
+warning • The value of the local variable 'size' isn't used • lib/active_job_page.dart:523:11 • unused_local_variable
+   info • Don't use 'BuildContext's across async gaps • lib/active_job_page.dart:630:55 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/active_job_page.dart:630:134 • use_build_context_synchronously
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/active_job_page.dart:654:67 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/active_job_page.dart:655:67 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/active_job_page.dart:656:67 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/active_job_page.dart:762:57 • deprecated_member_use
+warning • The value of the local variable 'currentDriverName' isn't used • lib/active_job_page.dart:817:51 • unused_local_variable
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/active_job_page.dart:832:87 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/active_job_page.dart:832:119 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/active_job_page.dart:856:94 • deprecated_member_use
+   info • 'MaterialStateProperty' is deprecated and shouldn't be used. Use WidgetStateProperty instead. Moved to the Widgets layer to make code available outside of Material. This feature was deprecated after v3.19.0-0.3.pre • lib/active_job_page.dart:1004:56 • deprecated_member_use
+   info • Unnecessary braces in a string interpolation • lib/active_job_page.dart:1040:90 • unnecessary_brace_in_string_interps
+   info • Statements in an if should be enclosed in a block • lib/active_job_page.dart:1049:72 • curly_braces_in_flow_control_structures
+warning • Dead code • lib/active_job_page.dart:1049:109 • dead_code
+warning • The left operand can't be null, so the right operand is never executed • lib/active_job_page.dart:1049:112 • dead_null_aware_expression
+   info • Statements in an if should be enclosed in a block • lib/active_job_page.dart:1050:79 • curly_braces_in_flow_control_structures
+warning • Dead code • lib/active_job_page.dart:1050:118 • dead_code
+warning • The left operand can't be null, so the right operand is never executed • lib/active_job_page.dart:1050:121 • dead_null_aware_expression
+warning • Dead code • lib/active_job_page.dart:1056:123 • dead_code
+warning • The left operand can't be null, so the right operand is never executed • lib/active_job_page.dart:1056:126 • dead_null_aware_expression
+warning • Dead code • lib/active_job_page.dart:1059:125 • dead_code
+warning • The left operand can't be null, so the right operand is never executed • lib/active_job_page.dart:1059:128 • dead_null_aware_expression
+warning • Dead code • lib/active_job_page.dart:1063:122 • dead_code
+warning • The left operand can't be null, so the right operand is never executed • lib/active_job_page.dart:1063:125 • dead_null_aware_expression
+warning • Dead code • lib/active_job_page.dart:1069:110 • dead_code
+warning • The left operand can't be null, so the right operand is never executed • lib/active_job_page.dart:1069:113 • dead_null_aware_expression
+warning • Dead code • lib/active_job_page.dart:1069:149 • dead_code
+warning • The left operand can't be null, so the right operand is never executed • lib/active_job_page.dart:1069:152 • dead_null_aware_expression
+   info • 'MaterialStateProperty' is deprecated and shouldn't be used. Use WidgetStateProperty instead. Moved to the Widgets layer to make code available outside of Material. This feature was deprecated after v3.19.0-0.3.pre • lib/active_job_page.dart:1103:80 • deprecated_member_use
+   info • 'MaterialStateProperty' is deprecated and shouldn't be used. Use WidgetStateProperty instead. Moved to the Widgets layer to make code available outside of Material. This feature was deprecated after v3.19.0-0.3.pre • lib/active_job_page.dart:1104:70 • deprecated_member_use
+   info • Unnecessary use of 'toList' in a spread • lib/active_job_page.dart:1109:50 • unnecessary_to_list_in_spreads
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/active_job_page.dart:1126:85 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/active_job_page.dart:1195:160 • deprecated_member_use
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/active_job_page.dart:1218:45 • use_build_context_synchronously
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/active_job_page.dart:1249:60 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/active_job_page.dart:1275:43 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/active_job_page.dart:1276:36 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/active_job_page.dart:1292:36 • deprecated_member_use
+   info • Unnecessary use of string interpolation • lib/active_job_page.dart:1318:29 • unnecessary_string_interpolations
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/active_job_page.dart:1330:85 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/active_job_page.dart:1337:62 • deprecated_member_use
+
+51 issues found. (ran in 3.3s)
