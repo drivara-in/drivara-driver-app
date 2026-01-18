@@ -14,7 +14,7 @@
     <uses-permission android:name="android.permission.SEND_SMS" />
 
     <application
-        android:label="drivara_driver_app"
+        android:label="Drivara Driver"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
         android:usesCleartextTraffic="true">
