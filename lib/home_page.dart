@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'leaderboard_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -28,6 +29,22 @@ class HomePage extends StatelessWidget {
              Text(
               'Permissions granted. Ready to drive.',
               style: GoogleFonts.inter(fontSize: 16, color: Colors.white70),
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton.icon(
+              onPressed: () {
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const LeaderboardPage()),
+                  );
+              },
+              icon: const Icon(Icons.leaderboard, color: Colors.black),
+              label: Text('View Leaderboard', style: GoogleFonts.outfit(fontSize: 18, color: Colors.black, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+              ),
             ),
           ],
         ),

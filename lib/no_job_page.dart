@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'api_config.dart';
 import 'login_page.dart';
+import 'leaderboard_page.dart';
 import 'theme/app_theme.dart';
 import 'package:provider/provider.dart';
 import 'providers/localization_provider.dart';
@@ -36,6 +37,23 @@ class NoJobPage extends StatelessWidget {
                 style: AppTextStyles.body,
               ),
               const SizedBox(height: 48),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const LeaderboardPage()),
+                    );
+                  },
+                  icon: const Icon(Icons.leaderboard),
+                  label: const Text("View Leaderboard"),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(

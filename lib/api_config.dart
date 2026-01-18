@@ -29,19 +29,56 @@ class ApiConfig {
   static Future<void> setAuthToken(String token) async {
     await _storage.write(key: 'auth_token', value: token);
     _dio.options.headers['Authorization'] = 'Bearer $token';
+    // Restore orgId if available
+    final orgId = await _storage.read(key: 'org_id');
+    if (orgId != null) {
+        _dio.options.headers['x-org-id'] = orgId;
+    }
+  }
+
+  static Future<void> setOrgId(String orgId) async {
+    await _storage.write(key: 'org_id', value: orgId);
+    _dio.options.headers['x-org-id'] = orgId;
   }
 
   static Future<String?> getAuthToken() async {
     final token = await _storage.read(key: 'auth_token');
     if (token != null) {
       _dio.options.headers['Authorization'] = 'Bearer $token';
+
+      // 1. Try storage
+      String? orgId = await _storage.read(key: 'org_id');
+      
+      // 2. Fallback: Extract from Token
+      if (orgId == null) {
+         try {
+           if (!JwtDecoder.isExpired(token)) {
+             final decoded = JwtDecoder.decode(token);
+             // Check both camelCase and snake_case
+             orgId = decoded['orgId'] ?? decoded['org_id'];
+             
+             if (orgId != null) {
+                // Persist for future
+                await _storage.write(key: 'org_id', value: orgId);
+             }
+           }
+         } catch (e) {
+           print('Error decoding JWT: $e');
+         }
+      }
+
+      if (orgId != null) {
+        _dio.options.headers['x-org-id'] = orgId;
+      }
     }
     return token;
   }
 
   static Future<void> logout() async {
     await _storage.delete(key: 'auth_token');
+    await _storage.delete(key: 'org_id');
     _dio.options.headers.remove('Authorization');
+    _dio.options.headers.remove('x-org-id');
   }
 
   static Future<String?> getDriverId() async {

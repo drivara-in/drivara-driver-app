@@ -71,6 +71,14 @@ class _OtpPageState extends State<OtpPage> {
         final token = response.data['token'];
         await ApiConfig.setAuthToken(token);
 
+        if (response.data['memberships'] != null && (response.data['memberships'] as List).isNotEmpty) {
+           final firstOrg = response.data['memberships'][0];
+           final orgId = firstOrg['org_id'];
+           if (orgId != null) {
+              await ApiConfig.setOrgId(orgId);
+           }
+        }
+
         // 2. Fetch Active Job
         await _checkActiveJob();
       } else {

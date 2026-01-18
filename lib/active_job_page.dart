@@ -11,7 +11,8 @@ import 'package:lottie/lottie.dart';
 import 'package:drivara_driver_app/widgets/route_timeline.dart';
 import 'package:drivara_driver_app/widgets/add_expense_sheet.dart';
 import 'package:drivara_driver_app/widgets/expense_list_sheet.dart';
-import 'package:drivara_driver_app/widgets/stop_completion_sheet.dart';
+import 'package:drivara_driver_app/widgets/action_button_card.dart';
+import 'package:drivara_driver_app/widgets/stop_action_sheet.dart';
 import 'api_config.dart';
 import 'providers/localization_provider.dart';
 import 'no_job_page.dart';
@@ -39,27 +40,127 @@ class ActiveJobPage extends StatefulWidget {
   State<ActiveJobPage> createState() => _ActiveJobPageState();
 }
 
-class _ActiveJobPageState extends State<ActiveJobPage> {
+class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserver {
   late Map<String, dynamic> _job;
   Map<String, dynamic>? _dashboardData;
+  Timer? _poller;
+  StreamSubscription? _streamSubscription;
+  
+  // State variables for UI
   bool _isLoading = false;
   bool _isActionLoading = false;
+  int? _selectedStopIndex;
   List<Map<String, dynamic>>? _fuelStations;
 
-  // Reminder State
-  Timer? _stopCheckTimer;
+  // Reminder State (retained as it's used in _connectStream)
   DateTime? _stoppedSince;
   bool _reminderSent = false;
 
-
-  JobStreamService? _streamService;
-  StreamSubscription? _streamSubscription;
+  JobStreamService? _streamService; // Retained as it's used in _connectStream
   final GlobalKey<dynamic> _mapKey = GlobalKey(); // Using dynamic to access state methods loosely or type it if possible
   
-  // Manual Selection State
-  int? _selectedStopIndex;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    NotificationService().init(); // Retained from original
+    _job = widget.job;
+    // _checkLocationPermission(); // This was in the provided snippet but not in original. Assuming it's a placeholder or future addition.
+    _initialFetch();
+    _connectStream();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stopPolling();
+    _disconnectStream();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      debugPrint("App Resumed: Restarting Services & Checking Job...");
+      _checkGlobalJobStatus(); // Immediate check
+      
+      // Resume Services
+      if (_poller == null || !_poller!.isActive) _startPolling();
+      if (_streamService == null || _streamSubscription == null) _connectStream();
+      
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      debugPrint("App Paused: Suspending Services (Battery Saving Mode)...");
+      _stopPolling();
+      _disconnectStream();
+    }
+  }
+
+  Future<void> _checkGlobalJobStatus() async {
+      try {
+          final res = await ApiConfig.dio.get('/driver/me/active-job');
+          final activeJob = res.data['activeJob'];
+          
+          if (!mounted) return;
+
+          // Case 1: No active job anymore -> Go to NoJobPage
+          if (activeJob == null) {
+              debugPrint("Job Ended/Cancelled. Redirecting to NoJobPage.");
+              Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const NoJobPage()),
+                  (route) => false
+              );
+              return;
+          }
+
+          // Case 2: Different Job Assigned -> Reload Page
+          if (activeJob['id'] != _job['id']) {
+              debugPrint("New Job Detected! Reloading.");
+              Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (_) => ActiveJobPage(job: activeJob))
+              );
+              return;
+          }
+
+          // Case 3: Same Job -> Just refresh dashboard data
+          debugPrint("Same Job. Refreshing Data.");
+          _fetchDashboardData();
+          
+      } catch (e) {
+          debugPrint("Error checking global job status: $e");
+      }
+  }
+
+  void _initialFetch() {
+      // Fetch data immediately
+      _fetchDashboardData();
+      _startPolling();
+  }
+
+  void _startPolling() {
+      _poller?.cancel(); // Safety cleanup
+      // Using 30s poll as backup heartbeat
+      _poller = Timer.periodic(const Duration(seconds: 30), (_) => _fetchDashboardData());
+  }
+
+  void _stopPolling() {
+      _poller?.cancel();
+      _poller = null;
+  }
+  
+  void _disconnectStream() {
+      _streamSubscription?.cancel();
+      _streamSubscription = null;
+      _streamService?.dispose();
+      _streamService = null;
+  }
 
   void _onStopTimelineTap(int index) {
+     // USER REQ: If last stop load is unloaded (ready to complete), make all stops unclickable.
+     if (_isReadyToComplete()) {
+        if (_selectedStopIndex != null) setState(() => _selectedStopIndex = null);
+        return;
+     }
+
      setState(() {
         if (_selectedStopIndex == index) {
            _selectedStopIndex = null; // Toggle off
@@ -69,22 +170,25 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
      });
   }
 
-  @override
-  void initState() {
-    super.initState();
-    NotificationService().init();
-    _job = widget.job;
-    // Initial fetch for loading state
-    _fetchDashboardData().then((_) {
-       _connectStream();
-    });
-  }
+  bool _isReadyToComplete() {
+      // Check if last stop is done (reached & action completed if applicable)
+      final stops = (_job['route_stops'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      if (stops.isEmpty) return false;
+      
+      final lastStop = stops.last;
+      final status = lastStop['status'];
+      
+      debugPrint("READY CHECK: LastStop Status=$status | Type=${lastStop['type']} | CompletedAt=${lastStop['action_completed_at']}");
 
-  @override
-  void dispose() {
-    _streamSubscription?.cancel();
-    _streamService?.dispose();
-    super.dispose();
+      if (status == 'pending' || status == null) return false;
+      
+      final type = (lastStop['type'] ?? lastStop['stop_type'] ?? lastStop['activity'] ?? 'stop').toString().toLowerCase();
+      if (type == 'loading' || type == 'unloading') {
+          return lastStop['action_completed_at'] != null;
+      }
+      
+      // For normal stops, if we are not pending, we assume we are reached/done.
+      return true;
   }
 
   void _connectStream() {
@@ -98,14 +202,23 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
            // The stream payload is flat, but dashboard expects nested structure.
            // We reconstruct it to match build() expectations.
            
-           final vehicle = _dashboardData?['vehicle'] ?? {};
-           vehicle['location'] = {
+           // Create a NEW map copy to ensure widget.vehicle != oldWidget.vehicle in child
+           final oldVehicle = _dashboardData?['vehicle'] ?? {};
+           final newVehicle = Map<String, dynamic>.from(oldVehicle);
+
+           newVehicle['location'] = {
               'lat': (data['lat'] as num?)?.toDouble() ?? 0.0,
               'lng': (data['lng'] as num?)?.toDouble() ?? 0.0,
               'heading': (data['heading'] as num?)?.toDouble() ?? 0.0
            };
-           vehicle['speed_kmh'] = data['speed'] ?? 0;
-           vehicle['odometer_km'] = data['odometer'] ?? vehicle['odometer_km'];
+           newVehicle['speed_kmh'] = data['speed'] ?? 0;
+           newVehicle['odometer_km'] = data['odometer'] ?? newVehicle['odometer_km'];
+           
+           if (_dashboardData == null) _dashboardData = {};
+           _dashboardData!['vehicle'] = newVehicle;
+
+           // Use newVehicle for local checks below
+           final vehicle = newVehicle;
 
            // --- Reminder Logic ---
            try {
@@ -229,11 +342,20 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
       if (!mounted) return;
       setState(() {
         _dashboardData = response.data;
-        debugPrint("DASHBOARD DATA: Vehicle: ${_dashboardData?['vehicle']}"); // Debug Initial Data
+        // debugPrint("DASHBOARD DATA: Vehicle: ${_dashboardData?['vehicle']}"); // Debug Initial Data
         if (_dashboardData?['job'] != null) {
             _job = _dashboardData!['job'];
         }
       });
+    } on DioException catch (e) {
+      // If we get a 404/403, the job probably doesn't exist or we lost access.
+      // Trigger a global check to see if we should get a new job or go to NoJobPage.
+      if (e.response?.statusCode == 404 || e.response?.statusCode == 403) {
+          debugPrint("Dashboard Fetch Failed (${e.response?.statusCode}). Verifying Global Job Status...");
+          if (mounted) _checkGlobalJobStatus();
+      } else {
+          debugPrint("Error fetching dashboard: $e");
+      }
     } catch (e) {
       debugPrint("Error fetching dashboard: $e");
     } finally {
@@ -242,36 +364,55 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
   }
 
   Future<void> _updateStatus(String action, {Map<String, dynamic>? body}) async {
-    // If complete_action or depart, we might need POD.
-    // Check if stopIndex is available to identify the stop type.
-    if (['complete_action', 'depart'].contains(action) && body != null && body['stopIndex'] != null) {
+    // Defines actions that require the Sheet
+    const sheetActions = ['reached', 'start_action', 'complete_action', 'depart', 'complete'];
+
+    if (sheetActions.contains(action) && body != null && body['stopIndex'] != null) {
         final stopIndex = body['stopIndex'] as int;
-        // Fetch stop details from local state
-        final stops = (_job['route_stops'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-        if (stopIndex < stops.length) {
-            final stop = stops[stopIndex];
-            // Show Sheet
-            await showModalBottomSheet(
-                context: context, 
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (ctx) => StopCompletionSheet(
-                    stop: stop, 
-                    stopIndex: stopIndex, 
-                    onSubmit: (fileId, notes) {
-                        // Pass to actual API call
-                        final newBody = Map<String, dynamic>.from(body);
-                        if (fileId != null) newBody['pod_upload_id'] = fileId;
-                        if (notes != null && notes.isNotEmpty) newBody['pod_notes'] = notes;
-                        _performUpdateStatus(action, body: newBody);
-                    }
-                )
-            );
-            return; // Wait for sheet callback
+        // Config Sheet
+        String title = "Confirm Action";
+        String uploadLabel = "Proof (Optional)";
+        bool requireFile = false;
+
+        if (action == 'reached') {
+           title = "Confirm Arrival";
+           uploadLabel = "Gate Entry / Proof";
+        } else if (action == 'start_action') {
+           title = "Start Activity"; 
+        } else if (action == 'complete_action') {
+           title = "Complete Activity"; 
+           uploadLabel = "Upload POD / Receipt";
+           requireFile = false; 
+        } else if (action == 'depart') {
+           title = "Confirm Departure";
+        } else if (action == 'complete') {
+           title = "Complete Trip";
         }
+
+        await showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (ctx) => StopActionSheet(
+            title: title,
+            uploadLabel: uploadLabel,
+            requireFile: requireFile,
+            isLoading: _isActionLoading,
+            onSubmit: (time, fileId, notes) {
+               Navigator.pop(ctx);
+               final data = Map<String, dynamic>.from(body);
+               data['actionAt'] = time.toIso8601String();
+               if (fileId != null) data['pod_upload_id'] = fileId;
+               if (notes != null && notes.isNotEmpty) data['pod_notes'] = notes;
+               
+               _performUpdateStatus(action, body: data);
+            },
+          )
+        );
+        return;
     }
 
-    // Default path
+    // Default path (e.g. Start Trip)
     await _performUpdateStatus(action, body: body);
   }
 
@@ -293,7 +434,10 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
          
          if (action == 'start') msg = t.t('job_started');
          else if (action == 'complete') {
-             msg = t.t('job_completed');
+             _poller?.cancel();
+             _disconnectStream();
+             // IMPORTANT: "Complete Trip" means driver is done. Job might be pending admin review.
+             msg = "Trip Completed"; 
              Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const NoJobPage()));
              return;
          }
@@ -1061,13 +1205,13 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
 
                             // Action Buttons (Dynamic)
                             if (!isStarted)
-                              ElevatedButton.icon(
-                                  onPressed: _isActionLoading ? null : () => _updateStatus('start'),
-                                  icon: const Icon(Icons.play_arrow),
-                                  label: Text(t.t('start_trip')),
-                                  style: AppTheme.darkTheme.elevatedButtonTheme.style!.copyWith(
-                                      backgroundColor: MaterialStateProperty.all(AppColors.success),
-                                  ),
+                              ActionButtonCard(
+                                label: t.t('start_trip') ?? 'Start Trip',
+                                subtitle: "Swipe to begin your journey",
+                                icon: Icons.play_arrow,
+                                color: AppColors.success,
+                                isLoading: _isActionLoading,
+                                onPressed: _isActionLoading ? null : () => _updateStatus('start'),
                               )
                               else Builder(
                                 builder: (context) {
@@ -1088,7 +1232,9 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                                        if (_selectedStopIndex! < stops.length) {
                                            stop = stops[_selectedStopIndex!];
                                            final status = stop['status'] ?? 'pending';
-                                           final type = stop['type'] ?? 'stop';
+                                           final rawType = stop['type'] ?? stop['stop_type'] ?? stop['activity'] ?? 'stop';
+                                           final type = rawType.toString().toLowerCase();
+                                           debugPrint("STOP DEBUG: Index=${_selectedStopIndex} | Status=$status | RawType=$rawType | ResolvedType=$type | ActionCompleted=${stop['action_completed_at']}");
                                            stopStatus = status;
 
                                            // Calc Distance
@@ -1108,6 +1254,35 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                                                    }
                                                }
                                            }
+
+                                            // VALIDATION: Check if any future stop is already active
+                                            // If Stop 1 is 'reached' or 'completed', Stop 0 cannot be acted upon.
+                                            bool futureStopActive = false;
+                                            for (int i = _selectedStopIndex! + 1; i < stops.length; i++) {
+                                                final s = stops[i];
+                                                if (s['status'] != null && s['status'] != 'pending') {
+                                                    futureStopActive = true;
+                                                    break;
+                                                }
+                                            }
+
+                                            if (futureStopActive) {
+                                                // Show warning or empty actions
+                                                return Padding(
+                                                  padding: const EdgeInsets.all(16.0),
+                                                  child: Column(
+                                                    children: [
+                                                       Text("Cannot update previous stop", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                                                       Text("You have already proceeded to a later stop.", style: TextStyle(color: Colors.grey)),
+                                                       TextButton(
+                                                           onPressed: () => setState(() => _selectedStopIndex = null),
+                                                           child: const Text("Cancel")
+                                                       )
+                                                    ],
+                                                  ),
+                                                );
+                                            }
+
                                            
                                            if (status == 'pending') {
                                                 // Always allow Reached
@@ -1124,9 +1299,13 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                                                     // Always allow Start Unloading
                                                     actions.add({'action': 'start_action', 'label': t.t('action_unloading') ?? 'Unload', 'stopIndex': _selectedStopIndex});
                                                 } else {
-                                                    // Restriction applies to Depart
+                                                    // Restriction applies to Depart OR Complete
                                                     if (!tooFar) {
-                                                        actions.add({'action': 'depart', 'label': t.t('action_departed') ?? 'Departed', 'stopIndex': _selectedStopIndex});
+                                                        if (_selectedStopIndex == stops.length - 1) {
+                                                            actions.add({'action': 'complete', 'label': t.t('action_complete_job') ?? 'Complete Trip', 'stopIndex': _selectedStopIndex});
+                                                        } else {
+                                                            actions.add({'action': 'depart', 'label': t.t('action_departed') ?? 'Departed', 'stopIndex': _selectedStopIndex});
+                                                        }
                                                     }
                                                 }
                                             } else if (status == 'action_in_progress') {
@@ -1138,51 +1317,107 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                                             }
                                        }
                                    } else {
-                                       // 2. Default: SSE Data
+                                    // 2. Default: SSE Data
                                        actions = (_dashboardData?['route'] != null && _dashboardData!['route']['available_actions'] != null) 
                                           ? (_dashboardData!['route']['available_actions'] as List).cast<Map<String, dynamic>>()
                                           : <Map<String, dynamic>>[];
                                    }
+
+                                   // USER REQ: "Once the last stop's load is unloaded, it should by default show complete action"
+                                   if (_isReadyToComplete()) {
+                                       // Force exit manual mode if we are ready to complete
+                                       if (isManual) {
+                                          debugPrint("Force exiting manual mode because job is ReadyToComplete");
+                                          // We can't setState during build, but we can treat 'isManual' as false locally for this render
+                                          // and queue a reset? Better to just ignore manual actions here.
+                                          isManual = false; 
+                                          // Note: Actual state reset needs to happen elsewhere or we just ignore it in UI like this.
+                                       }
                                    
+                                       // Force inject Complete Action if not present
+                                       bool hasComplete = actions.any((a) => a['action'] == 'complete' || a['action'] == 'depart'); // Depart will be converted below
+                                       if (!hasComplete) {
+                                           final stops = (_job['route_stops'] as List?) ?? [];
+                                           actions = [{
+                                              'action': 'complete', 
+                                              'label': t.t('action_complete_job') ?? 'Complete Trip',
+                                              'stopIndex': stops.length - 1
+                                           }];
+                                       }
+                                   }
+                                   
+                                   
+                                   // FIX: Intercept Depart on Last Stop -> Complete
+                                   for (var i = 0; i < actions.length; i++) {
+                                      final act = actions[i];
+                                      if (act['action'] == 'depart') {
+                                           int? stopIdx = act['stopIndex'];
+                                           final stops = (_job['route_stops'] as List?) ?? [];
+                                           if (stopIdx != null && stopIdx == stops.length - 1) {
+                                               actions[i] = {
+                                                  ...act,
+                                                  'action': 'complete', 
+                                                  'label': t.t('action_complete_job') ?? 'Complete Trip'
+                                               };
+                                           }
+                                      }
+                                   }
+
                                    if (actions.isNotEmpty) {
                                        return Column(
                                           children: [
-                                              if (isManual) 
-                                                Padding(
-                                                  padding: const EdgeInsets.only(bottom: 8.0),
-                                                  child: Text("Manual Control: Stop ${_selectedStopIndex! + 1}", style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
-                                                ),
+
                                               ...actions.map((act) {
-                                                  return Padding(
-                                                    padding: const EdgeInsets.only(bottom: 12.0),
-                                                    child: SizedBox(
-                                                      width: double.infinity,
-                                                      height: 56,
-                                                      child: ElevatedButton.icon(
-                                                          onPressed: _isActionLoading ? null : () {
-                                                             _updateStatus(act['action'], body: {'stopIndex': act['stopIndex'], 'force': isManual});
-                                                             if(isManual) setState(() => _selectedStopIndex = null);
-                                                          },
-                                                          icon: Icon(_getActionIcon(act['label'] ?? act['action']), size: 24),
-                                                          label: Text(act['label'] ?? act['action'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                                                          style: AppTheme.darkTheme.elevatedButtonTheme.style!.copyWith(
-                                                              backgroundColor: MaterialStateProperty.all(isManual ? Colors.orange.shade800 : Colors.blue.shade800),
-                                                              shape: MaterialStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                                                          ),
-                                                      ),
-                                                    ),
+                                                  // Determine Color & Subtitle
+                                                  Color btnColor = AppColors.primary;
+                                                  String sub = "Tap to proceed";
+                                                  
+                                                  final actionCode = act['action'] as String;
+                                                  if (actionCode == 'reached') {
+                                                     btnColor = Colors.blue.shade700;
+                                                     sub = "Confirm arrival at location";
+                                                  } else if (actionCode.contains('start_action')) {
+                                                      btnColor = Colors.orange.shade700;
+                                                      final lowerLabel = (act['label'] as String? ?? '').toLowerCase();
+                                                      sub = lowerLabel.contains('unload') ? "Unloading" : "Loading";
+                                                  } else if (actionCode.contains('complete_action')) {
+                                                     btnColor = Colors.green.shade700;
+                                                     sub = "Finish task & Upload POD";
+                                                  } else if (actionCode == 'depart') {
+                                                     btnColor = Colors.purple.shade700;
+                                                     sub = "Leave location for next stop";
+                                                  } else if (actionCode == 'complete') {
+                                                      btnColor = Colors.green; 
+                                                      sub = "Complete Trip";
+                                                  }
+
+
+                                                  
+                                                  // FIX: Manual mode usually sets orange, but 'complete' MUST be green
+                                                  Color finalColor = (isManual && actionCode != 'complete') ? Colors.orange.shade800 : btnColor;
+
+                                              return ActionButtonCard(
+                                                      label: _getLocalizedActionLabel(act, t),
+                                                      subtitle: sub,
+                                                      icon: _getActionIcon(act['label'] ?? act['action']),
+                                                      color: finalColor,
+                                                      isLoading: _isActionLoading,
+                                                      onPressed: _isActionLoading ? null : () {
+                                                         _updateStatus(act['action'], body: {'stopIndex': act['stopIndex'], 'force': isManual});
+                                                         if(isManual) setState(() => _selectedStopIndex = null);
+                                                      },
                                                   );
                                               }).toList(),
-                                              if (isManual)
-                                                TextButton(
-                                                    onPressed: () => setState(() => _selectedStopIndex = null),
-                                                    child: const Text("Cancel / Auto Mode", style: TextStyle(color: Colors.grey))
-                                                )
                                           ],
                                        );
                                    }
 
                                    // Default "On Route" State
+                                   // USER REQ: "still OFF ROUTE WARNING shows, it should not show when Driver completes it."
+                                   // Logic: If ready to complete, we might be far effectively (since we are done), but we shouldn't warn.
+                                   
+                                   bool showDistanceWarning = tooFar && !_isReadyToComplete();
+
                                    return Container(
                                        width: double.infinity,
                                        height: 56,
@@ -1196,10 +1431,10 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
                                                mainAxisAlignment: MainAxisAlignment.center,
                                                children: [
                                                    if (_selectedStopIndex != null) ...[
-                                                        Icon(tooFar ? Icons.error_outline : Icons.info_outline, color: tooFar ? Colors.orangeAccent : Colors.white),
+                                                        Icon(showDistanceWarning ? Icons.error_outline : Icons.info_outline, color: showDistanceWarning ? Colors.orangeAccent : Colors.white),
                                                         const SizedBox(width: 8),
                                                         Text(
-                                                            tooFar 
+                                                            showDistanceWarning 
                                                               ? "Distance: ${distKm.toStringAsFixed(1)} km > ${kAllowedActionRadiusKm.toStringAsFixed(0)} km\nYou are too far from the location."
                                                               : "Stop ${_selectedStopIndex! + 1}: ${stopStatus.toUpperCase()}", 
                                                             style: AppTextStyles.header.copyWith(fontSize: 16),
@@ -1447,5 +1682,33 @@ class _ActiveJobPageState extends State<ActiveJobPage> {
     if (lower.contains('depart')) return Icons.arrow_forward;
     if (lower.contains('finish') || lower.contains('loaded') || lower.contains('unloaded')) return Icons.check_circle;
     return Icons.play_arrow;
+  }
+
+  String _getLocalizedActionLabel(Map<String, dynamic> act, LocalizationProvider t) {
+    final action = act['action'] as String;
+    final rawLabel = (act['label'] as String? ?? '').toLowerCase();
+
+    if (action == 'reached') {
+        return t.t('action_reached') ?? 'Arrived';
+    }
+    if (action == 'depart') {
+        return t.t('action_departed') ?? 'Depart';
+    }
+    if (action == 'start_action') {
+        if (rawLabel.contains('unload')) return t.t('action_unloading') ?? 'Start Unloading';
+        return t.t('action_loading') ?? 'Start Loading';
+    }
+    if (action == 'complete_action') {
+        if (rawLabel.contains('unload')) return t.t('action_unloaded') ?? 'Finished Unloading';
+        return t.t('action_loaded') ?? 'Finished Loading';
+    }
+    
+    // Fallback: If label looks like a key (has underscores), try to translate it directly
+    if (rawLabel.contains('_')) {
+        final translated = t.t(rawLabel);
+        if (translated != null && translated != rawLabel) return translated;
+    }
+
+    return act['label'] ?? action;
   }
 }

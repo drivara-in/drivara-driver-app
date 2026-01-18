@@ -143,6 +143,23 @@ class RouteTimelineWidget extends StatelessWidget {
                       ),
                     ),
                   ),
+                  
+                  // Vehicle Icon Head
+                  Positioned(
+                    top: 13, // (48 - 24 icon) / 2 = 12ish, adjustments for center. Line is at top 21 height 6. Center ~24. Icon 24 center.
+                    left: halfMarker + (lineWidth * progress.clamp(0.0, 1.0)) - 12, // -12 to center the 24px icon horizontally
+                    child: Container(
+                        decoration: BoxDecoration(
+                           color: Colors.white,
+                           shape: BoxShape.circle,
+                           boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)]
+                        ), 
+                        padding: const EdgeInsets.all(2),
+                        child: Icon(Icons.local_shipping, size: 16, color: activeColor)
+                    ),
+                  ),
+                  
+                  // Stop markers
                   // Stop markers
                   ...List.generate(stopCount, (index) {
                     final stop = stops![index];
