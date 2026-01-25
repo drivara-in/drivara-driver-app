@@ -13,6 +13,7 @@ import 'package:drivara_driver_app/widgets/add_expense_sheet.dart';
 import 'package:drivara_driver_app/widgets/expense_list_sheet.dart';
 import 'package:drivara_driver_app/widgets/action_button_card.dart';
 import 'package:drivara_driver_app/widgets/stop_action_sheet.dart';
+import 'package:drivara_driver_app/pages/tyre_management_page.dart';
 import 'api_config.dart';
 import 'providers/localization_provider.dart';
 import 'no_job_page.dart';
@@ -951,6 +952,37 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                         backgroundColor: Colors.blueAccent,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         child: const Icon(Icons.list_alt, color: Colors.white),
+                   ),
+
+                   const SizedBox(height: 12),
+
+                   // 6. Tyre Management
+                   FloatingActionButton(
+                        heroTag: "tyreBtn",
+                        onPressed: () {
+                           // Navigate to Tyre Management
+                           // We need vehicleId and registrationNumber.
+                           // Assuming they are available in _dashboardData['vehicle']
+                           if (_dashboardData != null && _dashboardData!['vehicle'] != null) {
+                              final v = _dashboardData!['vehicle'];
+                              // Vehicle ID check
+                              if (v['id'] == null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Vehicle details not fully loaded yet")));
+                                  return;
+                              }
+                              
+                              Navigator.push(context, MaterialPageRoute(builder: (_) => TyreManagementPage(
+                                  vehicleId: v['id'],
+                                  registrationNumber: v['registrationNumber'] ?? 'Unknown'
+                              )));
+                           } else {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please wait for dashboard data...")));
+                           }
+                        },
+                        mini: true,
+                        backgroundColor: Colors.blueGrey,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: const Icon(Icons.settings_suggest, color: Colors.white),
                    ),
                 ],
               ),

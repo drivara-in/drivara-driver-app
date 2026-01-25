@@ -3,27 +3,52 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'dart:io';
+import 'package:dio/io.dart';
+import 'package:flutter/foundation.dart';
 
 class ApiConfig {
   // Read API base URL from .env file, fallback to localhost for emulator
   static String get baseUrl {
     final envUrl = dotenv.env['API_BASE_URL'];
     if (envUrl != null && envUrl.isNotEmpty) {
+      if (envUrl.endsWith('/api')) {
+        return envUrl;
+      }
       return '$envUrl/api';
     }
     // Fallback to localhost (works for emulator)
     return 'http://localhost:8080/api';
   } 
 
-  static final Dio _dio = Dio(BaseOptions(
-    baseUrl: baseUrl,
-    connectTimeout: const Duration(seconds: 10),
-    receiveTimeout: const Duration(seconds: 10),
-  ));
+  static Dio _createDio() {
+    final dio = Dio(BaseOptions(
+      baseUrl: baseUrl,
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 10),
+    ));
 
-  static final _storage = const FlutterSecureStorage();
+    dio.interceptors.add(LogInterceptor(
+      requestBody: true,
+      responseBody: true,
+      error: true,
+      logPrint: (obj) => debugPrint(obj.toString()),
+    ));
 
+    // Configure SSL Bypass for Dev
+    if (baseUrl.contains('dev.drivara.in') || baseUrl.contains('localhost')) {
+      // ignore: deprecated_member_use
+      (dio.httpClientAdapter as IOHttpClientAdapter).onHttpClientCreate = (client) {
+        client.badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+        return client;
+      };
+    }
+
+    return dio;
+  }
+
+  static final Dio _dio = _createDio();
   static Dio get dio => _dio;
+  static const _storage = FlutterSecureStorage();
   static FlutterSecureStorage get storage => _storage;
 
   static Future<void> setAuthToken(String token) async {
