@@ -60,6 +60,14 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
   JobStreamService? _streamService; // Retained as it's used in _connectStream
   final GlobalKey<dynamic> _mapKey = GlobalKey(); // Using dynamic to access state methods loosely or type it if possible
   
+  // Helper to safely parse numbers
+  num? _parseNum(dynamic v) {
+    if (v == null) return null;
+    if (v is num) return v;
+    if (v is String) return num.tryParse(v);
+    return null;
+  }
+  
   @override
   void initState() {
     super.initState();
@@ -203,16 +211,24 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
            // The stream payload is flat, but dashboard expects nested structure.
            // We reconstruct it to match build() expectations.
            
+           // Helper to safely parse numbers from String or Num
+           num? _parseNum(dynamic v) {
+              if (v == null) return null;
+              if (v is num) return v;
+              if (v is String) return num.tryParse(v);
+              return null;
+           }
+
            // Create a NEW map copy to ensure widget.vehicle != oldWidget.vehicle in child
            final oldVehicle = _dashboardData?['vehicle'] ?? {};
            final newVehicle = Map<String, dynamic>.from(oldVehicle);
 
            newVehicle['location'] = {
-              'lat': (data['lat'] as num?)?.toDouble() ?? 0.0,
-              'lng': (data['lng'] as num?)?.toDouble() ?? 0.0,
-              'heading': (data['heading'] as num?)?.toDouble() ?? 0.0
+              'lat': _parseNum(data['lat'])?.toDouble() ?? 0.0,
+              'lng': _parseNum(data['lng'])?.toDouble() ?? 0.0,
+              'heading': _parseNum(data['heading'])?.toDouble() ?? 0.0
            };
-           newVehicle['speed_kmh'] = data['speed'] ?? 0;
+           newVehicle['speed_kmh'] = _parseNum(data['speed']) ?? 0;
            newVehicle['odometer_km'] = data['odometer'] ?? newVehicle['odometer_km'];
            
            if (_dashboardData == null) _dashboardData = {};
@@ -223,8 +239,8 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
 
            // --- Reminder Logic ---
            try {
-              final double speed = (data['speed'] as num?)?.toDouble() ?? 0.0;
-              final bool? ignition = data['ignition'] as bool?;
+              final double speed = _parseNum(data['speed'])?.toDouble() ?? 0.0;
+              final bool? ignition = data['ignition'] is bool ? data['ignition'] : data['ignition'].toString().toLowerCase() == 'true';
               final List actions = data['available_actions'] ?? [];
 
               // User definition: Stopped = Ignition OFF
@@ -248,8 +264,8 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                            
                            if (stopIdx < stopsList.length) {
                                final stop = stopsList[stopIdx];
-                               final double vLat = vehicle['location']['lat'] ?? 0.0;
-                               final double vLng = vehicle['location']['lng'] ?? 0.0;
+                               final double vLat = _parseNum(vehicle['location']['lat'])?.toDouble() ?? 0.0;
+                               final double vLng = _parseNum(vehicle['location']['lng'])?.toDouble() ?? 0.0;
                                final double sLat = double.tryParse(stop['lat'].toString()) ?? 0.0;
                                final double sLng = double.tryParse(stop['lng'].toString()) ?? 0.0;
                                
@@ -292,10 +308,10 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
            
            // Robust parsing for Int gauges
            if (data['fuel_level'] != null) {
-               vehicle['fuel_level_percent'] = (data['fuel_level'] as num).toInt(); 
+               vehicle['fuel_level_percent'] = _parseNum(data['fuel_level'])?.toInt(); 
            }
            if (data['def_level'] != null) {
-               vehicle['def_level_percent'] = (data['def_level'] as num).toInt();
+               vehicle['def_level_percent'] = _parseNum(data['def_level'])?.toInt();
            }
            
            final balances = _dashboardData?['balances'] ?? {};
@@ -346,6 +362,32 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
         // debugPrint("DASHBOARD DATA: Vehicle: ${_dashboardData?['vehicle']}"); // Debug Initial Data
         if (_dashboardData?['job'] != null) {
             _job = _dashboardData!['job'];
+            
+            // Auto-start check: If status is scheduled but time is passed, start it.
+            if (_job['status'] == 'scheduled' && _job['planned_start_at'] != null) {
+                try {
+                   final scheduled = DateTime.parse(_job['planned_start_at']);
+                   final now = DateTime.now();
+                   debugPrint("AUTO-START CHECK: Status=${_job['status']}");
+                   debugPrint("AUTO-START CHECK: Planned (UTC)=${scheduled.toUtc()} | Local=${scheduled.toLocal()}");
+                   debugPrint("AUTO-START CHECK: Current (UTC)=${now.toUtc()} | Local=$now");
+                   debugPrint("AUTO-START CHECK: IsNowAfterScheduled? ${now.isAfter(scheduled)}");
+                   
+                   if (now.isAfter(scheduled)) {
+                       debugPrint("AUTO-START: Job is past scheduled time. Starting now...");
+                       // Use a tiny delay to allow build to finish or avoid state conflict
+                       Future.delayed(const Duration(milliseconds: 500), () {
+                           if (mounted) _updateStatus('start'); 
+                       });
+                   }
+                } catch (e) {
+                   debugPrint("Error parsing planned_start_at: $e");
+                }
+            } else {
+                 if (_job['status'] == 'scheduled') {
+                    debugPrint("AUTO-START CHECK: Skipped. PlannedStart=${_job['planned_start_at']}");
+                 }
+            }
         }
       });
     } on DioException catch (e) {
@@ -823,15 +865,15 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                        try {
                            final vLoc = vehicle['location'];
                            if (vLoc != null) {
-                              final lat = (vLoc['lat'] as num).toDouble();
-                              final lng = (vLoc['lng'] as num).toDouble();
-                              final service = FindFuelService();
-                              final routePoints = await service.getDirections(
-                                  LatLng(lat, lng), 
-                                  LatLng(station['lat'], station['lng'])
-                              );
-                              if (routePoints.isNotEmpty) {
-                                  (state as dynamic).updateDestination(
+                               final lat = _parseNum(vLoc['lat'])?.toDouble() ?? 0.0;
+                               final lng = _parseNum(vLoc['lng'])?.toDouble() ?? 0.0;
+                               final service = FindFuelService();
+                               final routePoints = await service.getDirections(
+                                   LatLng(lat, lng), 
+                                   LatLng(station['lat'], station['lng'])
+                               );
+                               if (routePoints.isNotEmpty) {
+                                   (state as dynamic).updateDestination(
                                      LatLng(station['lat'], station['lng']),
                                      station['name'],
                                      routePoints: routePoints
@@ -1137,57 +1179,57 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                            ),
                            const SizedBox(height: 24),
 
-                           // Vehicle Stats
-                           Text(t.t('vehicle_health'), style: AppTextStyles.header.copyWith(fontSize: 18, color: Theme.of(context).textTheme.bodyLarge?.color)),
-                           const SizedBox(height: 12),
-                            Container(
-                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 20),
-                               decoration: BoxDecoration(
-                                   color: Theme.of(context).cardTheme.color,
-                                   borderRadius: BorderRadius.circular(20),
-                                   border: Border.all(color: Theme.of(context).dividerColor)
-                               ),
-                              child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                  children: [
-                                      _buildPremiumGauge(t.t('fuel_level'), vehicle['fuel_level_percent'] ?? 0, vehicle['fuel_tank_capacity'] ?? 0, Colors.greenAccent, Icons.local_gas_station),
-                                      _buildPremiumGauge(t.t('def_level'), vehicle['def_level_percent'] ?? 0, vehicle['def_tank_capacity'] ?? 0, Colors.blueAccent, Icons.opacity),
-                                  ],
-                              ),
-                           ),
-                           const SizedBox(height: 24),
-
-                           // Route Progress
-                           Text(t.t('route_progress'), style: AppTextStyles.header.copyWith(fontSize: 18, color: Theme.of(context).textTheme.bodyLarge?.color)),
-                           const SizedBox(height: 12),
-                           Container(
-                               padding: const EdgeInsets.all(20),
-                               decoration: BoxDecoration(
-                                   color: Theme.of(context).cardTheme.color,
-                                   borderRadius: BorderRadius.circular(20),
-                                   border: Border.all(color: Theme.of(context).dividerColor)
-                               ),
-                               child: Column(
+                            // Vehicle Stats
+                            Text(t.t('vehicle_health'), style: AppTextStyles.header.copyWith(fontSize: 18, color: Theme.of(context).textTheme.bodyLarge?.color)),
+                            const SizedBox(height: 12),
+                             Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 20),
+                                decoration: BoxDecoration(
+                                    color: Theme.of(context).cardTheme.color,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: Theme.of(context).dividerColor)
+                                ),
+                               child: Row(
+                                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                    children: [
-                                       Row(
-                                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                           children: [
-                                               Column(
-                                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                                 children: [
-                                                   Text(t.t('distance_covered'), style: AppTextStyles.body.copyWith(color: Theme.of(context).textTheme.bodyMedium?.color)),
-                                                   Text("${distanceCovered.toStringAsFixed(1)} km", style: AppTextStyles.header.copyWith(fontSize: 16, color: Theme.of(context).textTheme.bodyLarge?.color)),
-                                                 ],
-                                               ),
-                                               Column(
-                                                 crossAxisAlignment: CrossAxisAlignment.end,
-                                                 children: [
-                                                   Text(t.t('distance_remaining'), style: AppTextStyles.body.copyWith(color: Theme.of(context).textTheme.bodyMedium?.color)),
-                                                   Text("${distanceRemaining.toStringAsFixed(1)} km", style: AppTextStyles.header.copyWith(fontSize: 16, color: Theme.of(context).textTheme.bodyLarge?.color)),
-                                                 ],
-                                               ),
-                                           ],
-                                       ),
+                                       _buildPremiumGauge(t.t('fuel_level'), _parseNum(vehicle['fuel_level_percent'] ?? vehicle['fuel_level'])?.toInt() ?? 0, _parseNum(vehicle['fuel_tank_capacity']) ?? 0, Colors.greenAccent, Icons.local_gas_station),
+                                       _buildPremiumGauge(t.t('def_level'), _parseNum(vehicle['def_level_percent'] ?? vehicle['def_level'])?.toInt() ?? 0, _parseNum(vehicle['def_tank_capacity']) ?? 0, Colors.blueAccent, Icons.opacity),
+                                   ],
+                               ),
+                            ),
+                            const SizedBox(height: 24),
+
+                            // Route Progress
+                            Text(t.t('route_progress'), style: AppTextStyles.header.copyWith(fontSize: 18, color: Theme.of(context).textTheme.bodyLarge?.color)),
+                            const SizedBox(height: 12),
+                            Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                    color: Theme.of(context).cardTheme.color,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: Theme.of(context).dividerColor)
+                                ),
+                                child: Column(
+                                    children: [
+                                        Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                                Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(t.t('distance_covered'), style: AppTextStyles.body.copyWith(color: Theme.of(context).textTheme.bodyMedium?.color)),
+                                                    Text("${_parseNum(distanceCovered)?.toStringAsFixed(1) ?? '0.0'} km", style: AppTextStyles.header.copyWith(fontSize: 16, color: Theme.of(context).textTheme.bodyLarge?.color)),
+                                                  ],
+                                                ),
+                                                Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                                  children: [
+                                                    Text(t.t('distance_remaining'), style: AppTextStyles.body.copyWith(color: Theme.of(context).textTheme.bodyMedium?.color)),
+                                                    Text("${_parseNum(distanceRemaining)?.toStringAsFixed(1) ?? '0.0'} km", style: AppTextStyles.header.copyWith(fontSize: 16, color: Theme.of(context).textTheme.bodyLarge?.color)),
+                                                  ],
+                                                ),
+                                            ],
+                                        ),
                                        const SizedBox(height: 10),
                                        
                                        // Custom Graphical Route Tracker

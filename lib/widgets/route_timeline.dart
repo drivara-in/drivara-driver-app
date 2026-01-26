@@ -210,7 +210,9 @@ class RouteTimelineWidget extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            // Stop labels
+            ),
+            const SizedBox(height: 8),
+            // Stop labels (A, B, C...)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: List.generate(stopCount, (index) {
@@ -237,6 +239,35 @@ class RouteTimelineWidget extends StatelessWidget {
                 );
               }),
             ),
+            
+            // Address Display (New)
+            if (selectedStopIndex != null && selectedStopIndex! < stops!.length)
+               Padding(
+                 padding: const EdgeInsets.only(top: 8.0),
+                 child: Container(
+                   width: double.infinity,
+                   padding: const EdgeInsets.all(8),
+                   decoration: BoxDecoration(
+                     color: _getActivityColor(stops![selectedStopIndex!]['activity']).withOpacity(0.1),
+                     borderRadius: BorderRadius.circular(8),
+                     border: Border.all(color: _getActivityColor(stops![selectedStopIndex!]['activity']).withOpacity(0.3))
+                   ),
+                   child: Row(
+                     children: [
+                        Icon(Icons.location_on, size: 16, color: _getActivityColor(stops![selectedStopIndex!]['activity'])),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                             stops![selectedStopIndex!]['address'] ?? "Unknown Location",
+                             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                             maxLines: 2,
+                             overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                     ],
+                   ),
+                 ),
+               ),
           ],
         );
       },
