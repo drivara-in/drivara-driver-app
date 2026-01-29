@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:drivara_driver_app/widgets/tyre_schematic.dart';
+import 'package:drivara_driver_app/widgets/tyre_slot_card.dart';
 import 'package:drivara_driver_app/api_config.dart';
 import 'package:provider/provider.dart';
 import 'package:drivara_driver_app/providers/localization_provider.dart';
@@ -7,11 +8,13 @@ import 'package:drivara_driver_app/providers/localization_provider.dart';
 class TyreManagementPage extends StatefulWidget {
   final String vehicleId;
   final String registrationNumber;
+  final String? orgId;
 
   const TyreManagementPage({
     super.key, 
     required this.vehicleId,
-    required this.registrationNumber
+    required this.registrationNumber,
+    this.orgId,
   });
 
   @override
@@ -35,22 +38,19 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
 
   Future<void> _fetchVehicleDetails() async {
     try {
-      // Find orgId context usually from session/provider, but here we might need to rely on API resolving it 
-      // or pass it in. If backend supports /driver/me/vehicle/:id that would be best.
-      // Assuming we use the org-scoped endpoint similar to React code, logic to get Org ID is needed.
-      // For now, let's try a direct vehicle fetch if available or search active job context. 
-      // Simplified: We'll use a direct vehicle lookup endpoint if exists or assume known Org context.
+      String? orgId = widget.orgId;
       
-      // Since we don't have easy Org ID here without passing it, let's rely on the fact 
-      // the driver app often uses a simplified API facade.
-      // Validating existing APIs... React used `/api/orgs/${orgId}/vehicles/${vehicleId}`
+      if (orgId == null) {
+          try {
+             final meRes = await ApiConfig.dio.get('/driver/me/profile'); // Corrected endpoint guess?
+             orgId = meRes.data['selectedOrgId'] ?? meRes.data['orgs']?[0]['id'];
+          } catch(e) {
+             // fallback to error
+             debugPrint("Could not determine orgId: $e");
+          }
+      }
       
-      // Let's assume we can fetch vehicle via global lookup or driver context.
-      // Using a hypothertical endpoint or the standard one with a hardcoded assumption/lookup.
-      // We'll first try to get the driver's active job to find the org, or user profile.
-      
-      final meRes = await ApiConfig.dio.get('/driver/me');
-      final orgId = meRes.data['selectedOrgId'] ?? meRes.data['orgs']?[0]['id'];
+      if (orgId == null) throw "Organization ID not found";
       
       final res = await ApiConfig.dio.get('/orgs/$orgId/vehicles/${widget.vehicleId}');
       
@@ -62,7 +62,6 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
       debugPrint("Error fetching vehicle: $e");
       if (mounted) {
          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to load vehicle: $e")));
-         // Navigator.pop(context); // Optional: pop on error
          setState(() => _isLoading = false);
       }
     }
@@ -137,8 +136,8 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
     setState(() => _isSaving = true);
     
     try {
-        final meRes = await ApiConfig.dio.get('/driver/me');
-        final orgId = meRes.data['selectedOrgId'] ?? meRes.data['orgs']?[0]['id'];
+        final orgId = widget.orgId;
+        if (orgId == null) throw "Org ID missing";
         
         // 1. Update Vehicle
         await ApiConfig.dio.post(
@@ -160,37 +159,96 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
     }
   }
 
+  Map<String, dynamic> _deriveLayoutFromDetails() {
+      if (_tyreDetails.isEmpty) {
+          return {'wheelsByAxle': [], 'splitAfter': -1};
+      }
+
+      int maxAxle = 0;
+      Map<int, int> wheelsPerAxle = {};
+
+      for (var key in _tyreDetails.keys) {
+          // Expected format: "A1-L", "A2-RO"
+          final parts = key.split('-');
+          if (parts.length < 2) continue;
+          
+          final axlePart = parts[0]; // "A1"
+          if (axlePart.startsWith('A')) {
+              final axleNum = int.tryParse(axlePart.substring(1));
+              if (axleNum != null) {
+                  if (axleNum > maxAxle) maxAxle = axleNum;
+                  
+                  // Count wheels? Simplified: if we see "O" (Outer) or "I" (Inner), it's likely 4 wheels.
+                  // If just L/R, it might be 2.
+                  // We'll track max wheels seen for this axle.
+                  final pos = parts[1]; // "L", "RO", etc.
+                  int currentCount = wheelsPerAxle[axleNum] ?? 2; // Default to 2
+                  
+                  if (pos.contains('I') || pos.contains('O')) {
+                     currentCount = 4;
+                  }
+                  wheelsPerAxle[axleNum] = currentCount;
+              }
+          }
+      }
+      
+      List<int> config = [];
+      for (int i = 1; i <= maxAxle; i++) {
+         config.add(wheelsPerAxle[i] ?? 2);
+      }
+      
+      // Heuristic for split: usually between 1st (steer) and others if > 2 axles
+      int split = -1;
+      if (config.length > 2) split = 0; // standard truck layout
+
+      return {
+          'wheelsByAxle': config,
+          'splitAfter': split
+      };
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Infer layout from tyreLayoutCode or hardcoded map if not fully dynamic
-    // Logic: fetch layout definition based on code.
-    // Simplifying: layout definition is hardcoded or fetched. 
-    // Let's assume _vehicleData contains 'tyreLayout' structure or we derive it.
-    // If not, we need a map of Code -> Layout.
+    // Dynamically derive layout from data keys
+    final layout = _deriveLayoutFromDetails();
+    final allKeys = _getAllPossibleKeys(layout);
     
-    // Stub Layout for fallback
-    final layout = {
-        'wheelsByAxle': [2, 4], // Generic 6-wheeler
-        'splitAfter': -1
-    };
-
-    // If real data exists, parse it (TODO: Share layout definitions with Flutter)
-    // For now, using the stub unless we can parse `tyreLayoutCode`
+    // Sort keys logically: A1-L, A1-R, A2...
+    // Or just use the keys present + derived empty ones?
+    // Let's use the explicit slot capability if we can derive it.
+    // For now, sorting available keys from details + any we might imply? 
+    // Ideally we should generate the full "expected" key set based on `layout['wheelsByAxle']`.
+    // Let's implement a helper to generate all expected keys for the grid.
+    final expectedKeys = _generateExpectedKeys(layout);
     
     return Scaffold(
+      backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: Colors.black87),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("Tyre Management"),
-            Text(widget.registrationNumber, style: const TextStyle(fontSize: 12)),
+             Text(widget.registrationNumber, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 16)),
+             Text("${expectedKeys.length} Tyres • ${layout['wheelsByAxle'].length} Axles", style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
           ],
         ),
         actions: [
           if (_swaps.isNotEmpty)
-             UndoButton(
-               icon: Icons.undo, 
-               onPressed: _undoLastSwap
+             Container(
+               margin: const EdgeInsets.only(right: 16, top: 12, bottom: 12),
+               child: ElevatedButton.icon(
+                 onPressed: _undoLastSwap,
+                 icon: const Icon(Icons.undo, size: 14),
+                 label: const Text("Undo"),
+                 style: ElevatedButton.styleFrom(
+                   backgroundColor: Colors.amber.shade100, 
+                   foregroundColor: Colors.amber.shade900,
+                   elevation: 0,
+                   padding: const EdgeInsets.symmetric(horizontal: 12)
+                 ),
+               ),
              )
         ],
       ),
@@ -198,54 +256,111 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
         ? const Center(child: CircularProgressIndicator())
         : Column(
             children: [
-               if (_swaps.isNotEmpty)
-                 Container(
-                   color: Colors.amber.shade100,
-                   padding: const EdgeInsets.all(8),
-                   width: double.infinity,
-                   child: Text(
-                     "${_swaps.length} changes pending",
-                     style: const TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold),
-                     textAlign: TextAlign.center,
-                   ),
-                 ),
-
-               if (_sourceKey == null)
-                  const Padding(
-                    padding: EdgeInsets.all(8.0),
-                    child: Text("Tap a tyre to select, then another to swap.", style: TextStyle(color: Colors.grey)),
-                  )
-               else
+               // Interaction Banner
+               if (_sourceKey != null)
                   Container(
+                    width: double.infinity,
                     color: Colors.blue.shade50,
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text("Select target for "),
-                        Text(_sourceKey!, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        const Icon(Icons.touch_app, size: 16, color: Colors.blue),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(
+                              children: [
+                                const TextSpan(text: "Select target to swap "),
+                                TextSpan(text: _sourceKey!, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              ]
+                            ),
+                            style: TextStyle(color: Colors.blue.shade900, fontSize: 13),
+                          ),
+                        ),
+                        TextButton(
+                           onPressed: () => setState(() => _sourceKey = null),
+                           child: const Text("Cancel"),
+                        )
                       ],
                     ),
                   ),
 
                Expanded(
-                 child: TyreSchematic(
-                    layout: layout, // TODO: Enhance to switch based on vehicleData['tyreLayoutCode']
-                    selectedKeys: [_sourceKey].whereType<String>().toList(),
-                    onTyreTap: _handleTyreTap,
+                 child: Row(
+                   crossAxisAlignment: CrossAxisAlignment.stretch,
+                   children: [
+                      // LEFT: Schematic Stickyt
+                      Container(
+                        width: 140, // Fixed narrow width for schematic
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          border: Border(right: BorderSide(color: Colors.grey.shade200))
+                        ),
+                        child: TyreSchematic(
+                           layout: layout, 
+                           selectedKeys: [_sourceKey].whereType<String>().toList(),
+                           onTyreTap: _handleTyreTap,
+                        ),
+                      ),
+                      
+                      // RIGHT: Manifest Grid
+                      Expanded(
+                        child: ListView(
+                          padding: const EdgeInsets.all(16),
+                          children: [
+                             Text("Active Configuration", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey.shade500, letterSpacing: 1)),
+                             const SizedBox(height: 12),
+                             
+                             Wrap(
+                               spacing: 12,
+                               runSpacing: 12,
+                               children: expectedKeys.map((k) {
+                                  // Find details
+                                  final d = _tyreDetails[k] ?? {};
+                                  final isSel = _sourceKey == k;
+                                  
+                                  return SizedBox(
+                                    width: 160, // Fixed Card Width
+                                    height: 110,
+                                    child: TyreSlotCard(
+                                      positionKey: k,
+                                      details: d,
+                                      isSelected: isSel,
+                                      isSource: _sourceKey != null,
+                                      onTap: () => _handleTyreTap(k),
+                                    ),
+                                  );
+                               }).toList(),
+                             ),
+                             
+                             const SizedBox(height: 100), // Bottom padding for FAB/Button
+                          ],
+                        ),
+                      )
+                   ],
                  ),
                ),
                
-               Padding(
-                 padding: const EdgeInsets.all(16.0),
+               // Bottom Action Bar
+               Container(
+                 padding: const EdgeInsets.all(16),
+                 decoration: BoxDecoration(
+                   color: Colors.white,
+                   boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), offset: const Offset(0, -4), blurRadius: 16)]
+                 ),
                  child: SizedBox(
                    width: double.infinity,
                    child: ElevatedButton(
                      onPressed: _swaps.isEmpty ? null : _saveChanges,
-                     style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+                     style: ElevatedButton.styleFrom(
+                       padding: const EdgeInsets.symmetric(vertical: 16),
+                       backgroundColor: Colors.blue.shade700,
+                       disabledBackgroundColor: Colors.grey.shade300,
+                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                     ),
                      child: _isSaving 
                         ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
-                        : const Text("Save Changes"),
+                        : Text(_swaps.isEmpty ? "No Changes" : "Save ${_swaps.length} Changes", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                    ),
                  ),
                )
@@ -253,15 +368,35 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
         ),
     );
   }
-}
 
-class UndoButton extends StatelessWidget {
-   final IconData icon;
-   final VoidCallback onPressed;
-   const UndoButton({super.key, required this.icon, required this.onPressed});
-   
-   @override
-   Widget build(BuildContext context) {
-      return IconButton(icon: Icon(icon), onPressed: onPressed);
-   }
+  // Helper to generate full list of expected keys based on layout
+  List<String> _generateExpectedKeys(Map<String, dynamic> layout) {
+      List<String> keys = [];
+      final axles = layout['wheelsByAxle'] as List<dynamic>? ?? [];
+      
+      for(int i=0; i<axles.length; i++) {
+         int count = axles[i] as int;
+         int axleNum = i + 1;
+         if (count == 2) {
+            keys.add("A$axleNum-L");
+            keys.add("A$axleNum-R");
+         } else if (count == 4) {
+             keys.add("A$axleNum-LO");
+             keys.add("A$axleNum-LI");
+             keys.add("A$axleNum-RI");
+             keys.add("A$axleNum-RO");
+         } else {
+             // generic
+             for(int k=0; k<count; k++) keys.add("A$axleNum-W${k+1}");
+         }
+      }
+      return keys;
+  }
+  
+  List<String> _getAllPossibleKeys(Map<String, dynamic> layout) {
+     final valid = _generateExpectedKeys(layout);
+     // Also include any extra keys found in details but not in layout (e.g. spares SP1)
+     final extras = _tyreDetails.keys.where((k) => !valid.contains(k)).toList();
+     return [...valid, ...extras];
+  }
 }

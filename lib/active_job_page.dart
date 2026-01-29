@@ -1007,15 +1007,16 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                            // Assuming they are available in _dashboardData['vehicle']
                            if (_dashboardData != null && _dashboardData!['vehicle'] != null) {
                               final v = _dashboardData!['vehicle'];
-                              // Vehicle ID check
-                              if (v['id'] == null) {
+                              // Vehicle ID check with fallback
+                              if (v['id'] == null && _job['vehicle_id'] == null) {
                                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Vehicle details not fully loaded yet")));
                                   return;
                               }
                               
                               Navigator.push(context, MaterialPageRoute(builder: (_) => TyreManagementPage(
-                                  vehicleId: v['id'],
-                                  registrationNumber: v['registrationNumber'] ?? 'Unknown'
+                                  vehicleId: v['id'] ?? _job['vehicle_id'],
+                                  registrationNumber: v['registrationNumber'] ?? 'Unknown',
+                                  orgId: _job['org_id']
                               )));
                            } else {
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please wait for dashboard data...")));
@@ -1359,19 +1360,22 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
 
                                            
                                            if (status == 'pending') {
-                                                // Always allow Reached
-                                                String label = 'Arrived';
-                                                if (type == 'loading') label = t.t('reached_loading_point') ?? 'Reached Loading Point';
-                                                else if (type == 'unloading') label = t.t('reached_unloading_point') ?? 'Reached Unloading Point';
-                                                
-                                                actions.add({'action': 'reached', 'label': label, 'stopIndex': _selectedStopIndex});
+                                                if (!tooFar) {
+                                                    String label = 'Arrived';
+                                                    if (type == 'loading') label = t.t('reached_loading_point') ?? 'Reached Loading Point';
+                                                    else if (type == 'unloading') label = t.t('reached_unloading_point') ?? 'Reached Unloading Point';
+                                                    
+                                                    actions.add({'action': 'reached', 'label': label, 'stopIndex': _selectedStopIndex});
+                                                }
                                            } else if (status == 'reached') {
                                                 if (type == 'loading' && stop['action_completed_at'] == null) {
-                                                    // Always allow Start Loading
-                                                    actions.add({'action': 'start_action', 'label': t.t('action_loading') ?? 'Load', 'stopIndex': _selectedStopIndex});
+                                                    if (!tooFar) {
+                                                        actions.add({'action': 'start_action', 'label': t.t('action_loading') ?? 'Load', 'stopIndex': _selectedStopIndex});
+                                                    }
                                                 } else if (type == 'unloading' && stop['action_completed_at'] == null) {
-                                                    // Always allow Start Unloading
-                                                    actions.add({'action': 'start_action', 'label': t.t('action_unloading') ?? 'Unload', 'stopIndex': _selectedStopIndex});
+                                                    if (!tooFar) {
+                                                        actions.add({'action': 'start_action', 'label': t.t('action_unloading') ?? 'Unload', 'stopIndex': _selectedStopIndex});
+                                                    }
                                                 } else {
                                                     // Restriction applies to Depart OR Complete
                                                     if (!tooFar) {

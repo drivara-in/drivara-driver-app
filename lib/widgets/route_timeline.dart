@@ -210,8 +210,7 @@ class RouteTimelineWidget extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            ),
-            const SizedBox(height: 8),
+
             // Stop labels (A, B, C...)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

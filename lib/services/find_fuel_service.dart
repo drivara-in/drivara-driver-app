@@ -12,10 +12,16 @@ class FindFuelService {
     _dio = Dio();
     // Inherit auth token from main ApiConfig
     _dio.interceptors.add(InterceptorsWrapper(
-       onRequest: (options, handler) async {
+      onRequest: (options, handler) async {
           final token = await ApiConfig.getAuthToken();
           if (token != null) {
              options.headers['Authorization'] = 'Bearer $token';
+             
+             // Also add orgId
+             final orgId = await ApiConfig.storage.read(key: 'org_id');
+             if (orgId != null) {
+               options.headers['x-org-id'] = orgId;
+             }
           }
           return handler.next(options);
        }
