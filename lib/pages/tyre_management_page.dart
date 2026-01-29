@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:drivara_driver_app/widgets/tyre_schematic.dart';
 import 'package:drivara_driver_app/widgets/tyre_slot_card.dart';
 import 'package:drivara_driver_app/api_config.dart';
@@ -67,68 +68,39 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
     }
   }
 
-  void _handleTyreTap(String key) {
-    if (_sourceKey == null) {
-      // Select Source
-      setState(() => _sourceKey = key);
-    } else if (_sourceKey == key) {
-      // Deselect
-      setState(() => _sourceKey = null);
-    } else {
-      // SWAP
-      _performSwap(_sourceKey!, key);
-    }
+  void _handleTyreSwap(String source, String target) {
+    if (source == target) return;
+    HapticFeedback.heavyImpact();
+    setState(() {
+      _performSwap(source, target);
+      // Removed interaction banner logic, simple direct manipulation
+    });
   }
 
   void _performSwap(String source, String target) {
-    setState(() {
-      // record swap
-      _swaps.add({
-        'from': source,
-        'to': target,
-        'fromLabel': source, // could prettify
-        'toLabel': target
-      });
-
-      // update local state
-      final sourceData = _tyreDetails[source];
-      final targetData = _tyreDetails[target];
-
-      _tyreDetails[source] = targetData ?? {};
-      _tyreDetails[target] = sourceData ?? {};
-
-      // reset selection
-      _sourceKey = null;
+    // record swap
+    _swaps.add({
+      'from': source,
+      'to': target,
+      'fromLabel': source, 
+      'toLabel': target
     });
+
+    // update local state
+    final sourceData = _tyreDetails[source];
+    final targetData = _tyreDetails[target];
+
+    _tyreDetails[source] = targetData ?? {};
+    _tyreDetails[target] = sourceData ?? {};
   }
 
-  void _undoLastSwap() {
-    if (_swaps.isEmpty) return;
-    final last = _swaps.removeLast();
-    // Reverse logic
-    _performSwap(last['to']!, last['from']!); // This adds a new swap entry, we should manually revert instead.
-    
-    // Manual Revert:
+  void _undoAll() {
     setState(() {
-        _swaps.removeLast(); // Remove the "revert" swap we just added by calling performSwap recursively? 
-        // No, let's just do logic manually to avoid mess.
+       // Reload to reset
+       _swaps.clear();
+       _isLoading = true;
     });
-    // Actually, simpler: just reload data or track history better. 
-    // For MVP, just "Reset" is easier than undo stack? 
-    // Let's implement proper undo:
-    
-    setState(() {
-       // We already popped last above.
-       // Now reverse the data change.
-       final source = last['to']!; // was target
-       final target = last['from']!; // was source
-       
-       final sourceData = _tyreDetails[source];
-       final targetData = _tyreDetails[target];
-       
-       _tyreDetails[source] = targetData ?? {};
-       _tyreDetails[target] = sourceData ?? {};
-    });
+    _fetchVehicleDetails(); // Simplest reset
   }
 
   Future<void> _saveChanges() async {
@@ -136,18 +108,14 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
     setState(() => _isSaving = true);
     
     try {
-        final orgId = widget.orgId;
+        final orgId = widget.orgId; // Assuming passed or we throw
         if (orgId == null) throw "Org ID missing";
         
-        // 1. Update Vehicle
         await ApiConfig.dio.post(
            '/orgs/$orgId/vehicles/${widget.vehicleId}', 
-           data: {'tyreDetails': _tyreDetails} // Validate endpoint method (likely PATCH/POST)
+           data: {'tyreDetails': _tyreDetails}
         );
 
-        // 2. Create Expense (Optional) - User prompt?
-        // For MVP, integrated save. Web had prompt. We can implement prompt later.
-        
         if (mounted) {
            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.t('changes_saved') ?? "Changes saved successfully!")));
            Navigator.pop(context);
@@ -168,21 +136,16 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
       Map<int, int> wheelsPerAxle = {};
 
       for (var key in _tyreDetails.keys) {
-          // Expected format: "A1-L", "A2-RO"
           final parts = key.split('-');
           if (parts.length < 2) continue;
           
-          final axlePart = parts[0]; // "A1"
+          final axlePart = parts[0]; 
           if (axlePart.startsWith('A')) {
               final axleNum = int.tryParse(axlePart.substring(1));
               if (axleNum != null) {
                   if (axleNum > maxAxle) maxAxle = axleNum;
-                  
-                  // Count wheels? Simplified: if we see "O" (Outer) or "I" (Inner), it's likely 4 wheels.
-                  // If just L/R, it might be 2.
-                  // We'll track max wheels seen for this axle.
-                  final pos = parts[1]; // "L", "RO", etc.
-                  int currentCount = wheelsPerAxle[axleNum] ?? 2; // Default to 2
+                  final pos = parts[1]; 
+                  int currentCount = wheelsPerAxle[axleNum] ?? 2; 
                   
                   if (pos.contains('I') || pos.contains('O')) {
                      currentCount = 4;
@@ -197,9 +160,8 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
          config.add(wheelsPerAxle[i] ?? 2);
       }
       
-      // Heuristic for split: usually between 1st (steer) and others if > 2 axles
       int split = -1;
-      if (config.length > 2) split = 0; // standard truck layout
+      if (config.length > 2) split = 0; 
 
       return {
           'wheelsByAxle': config,
@@ -207,137 +169,188 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
       };
   }
 
-  @override
-  Widget build(BuildContext context) {
-    // Dynamically derive layout from data keys
-    final layout = _deriveLayoutFromDetails();
-    final allKeys = _getAllPossibleKeys(layout);
+  void _handleTyreTap(String key, Map<String, dynamic> details) {
+    if (details.isEmpty) return; // Or show specific "Empty" dialog
     
-    // Sort keys logically: A1-L, A1-R, A2...
-    // Or just use the keys present + derived empty ones?
-    // Let's use the explicit slot capability if we can derive it.
-    // For now, sorting available keys from details + any we might imply? 
-    // Ideally we should generate the full "expected" key set based on `layout['wheelsByAxle']`.
-    // Let's implement a helper to generate all expected keys for the grid.
-    final expectedKeys = _generateExpectedKeys(layout);
-    
-    return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Colors.white,
-        iconTheme: const IconThemeData(color: Colors.black87),
-        title: Column(
+    final loc = Provider.of<LocalizationProvider>(context, listen: false);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: theme.cardColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-             Text(widget.registrationNumber, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 16)),
-             Text("${expectedKeys.length} Tyres • ${layout['wheelsByAxle'].length} Axles", style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
-          ],
-        ),
-        actions: [
-          if (_swaps.isNotEmpty)
-             Container(
-               margin: const EdgeInsets.only(right: 16, top: 12, bottom: 12),
+             Row(
+               children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(color: isDark ? Colors.blue.withOpacity(0.2) : Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
+                    child: Text(key, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                  ),
+                  const Spacer(),
+                  IconButton(icon: Icon(Icons.close, color: theme.iconTheme.color), onPressed: () => Navigator.pop(ctx))
+               ],
+             ),
+             const SizedBox(height: 20),
+             _buildDetailRow(loc.t('brand'), details['brand']),
+             _buildDetailRow(loc.t('model'), details['model']),
+             _buildDetailRow(loc.t('serial'), details['serial']),
+             const Divider(height: 30),
+             Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                   Text(loc.t('odometer_installed'), style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7))),
+                   Text("${details['mount_odometer'] ?? '-'} km", style: TextStyle(fontWeight: FontWeight.bold, color: theme.textTheme.bodyLarge?.color))
+                ],
+             ),
+             const SizedBox(height: 10),
+             Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                   Text(loc.t('total_run'), style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7))),
+                   Text("${details['kms'] ?? '-'} km", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.green))
+                ],
+             ),
+             const SizedBox(height: 30),
+             
+             // Actions
+             SizedBox(
+               width: double.infinity,
                child: ElevatedButton.icon(
-                 onPressed: _undoLastSwap,
-                 icon: const Icon(Icons.undo, size: 14),
-                 label: const Text("Undo"),
+                 onPressed: () {
+                   Navigator.pop(ctx);
+                   _showSwapTargetSelector(key);
+                 }, 
+                 icon: const Icon(Icons.swap_horiz, color: Colors.white),
+                 label: Text(loc.t('move_swap'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                  style: ElevatedButton.styleFrom(
-                   backgroundColor: Colors.amber.shade100, 
-                   foregroundColor: Colors.amber.shade900,
-                   elevation: 0,
-                   padding: const EdgeInsets.symmetric(horizontal: 12)
+                   padding: const EdgeInsets.symmetric(vertical: 16),
+                   backgroundColor: theme.primaryColor,
+                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
                  ),
                ),
              )
+          ],
+        ),
+      ),
+    );
+  }
+  
+  void _showSwapTargetSelector(String sourceKey) {
+     final loc = Provider.of<LocalizationProvider>(context, listen: false);
+     final theme = Theme.of(context);
+     
+     final availableTargets = _getAllPossibleKeys(_deriveLayoutFromDetails())
+         .where((k) => k != sourceKey)
+         .toList();
+         
+     showModalBottomSheet(
+       context: context,
+       isScrollControlled: true,
+       backgroundColor: theme.cardColor,
+       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+       builder: (ctx) => DraggableScrollableSheet(
+         initialChildSize: 0.6,
+         minChildSize: 0.4,
+         maxChildSize: 0.9,
+         expand: false,
+         builder: (context, scrollController) {
+            return Container(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                   Text(loc.t('swap_tyre_title'), style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.textTheme.titleLarge?.color)),
+                   const SizedBox(height: 10),
+                   Text("${loc.t('select_target_tyre')} $sourceKey", style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7))),
+                   const SizedBox(height: 20),
+                   Expanded(
+                     child: ListView.builder(
+                       controller: scrollController,
+                       itemCount: availableTargets.length,
+                       itemBuilder: (ctx, i) {
+                          final target = availableTargets[i];
+                          final details = _tyreDetails[target] ?? {};
+                          final hasTyre = details.isNotEmpty;
+                          
+                          return ListTile(
+                            leading: Icon(hasTyre ? Icons.circle : Icons.radio_button_unchecked, color: hasTyre ? theme.iconTheme.color : Colors.grey),
+                            title: Text(target, style: TextStyle(fontWeight: FontWeight.bold, color: theme.textTheme.bodyLarge?.color)),
+                            subtitle: Text(hasTyre ? "${details['brand']} ${details['serial']}" : "Empty Slot", style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7))),
+                            onTap: () {
+                               Navigator.pop(ctx);
+                               _handleTyreSwap(sourceKey, target);
+                            },
+                          );
+                       },
+                     ),
+                   )
+                ],
+              ),
+            );
+         },
+       ),
+     );
+  }
+
+  Widget _buildDetailRow(String label, String? value) {
+     final theme = Theme.of(context);
+     return Padding(
+       padding: const EdgeInsets.only(bottom: 12),
+       child: Row(
+         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+         children: [
+            Text(label, style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6), fontSize: 13)),
+            Text(value ?? "-", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: theme.textTheme.bodyLarge?.color))
+         ],
+       ),
+     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final layout = _deriveLayoutFromDetails();
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final loc = Provider.of<LocalizationProvider>(context);
+    
+    return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: theme.cardColor,
+        centerTitle: true,
+        title: Text(widget.registrationNumber, style: TextStyle(color: theme.textTheme.titleLarge?.color, fontWeight: FontWeight.bold)),
+        iconTheme: theme.iconTheme,
+        actions: [
+          // Reset Button (Undo Icon)
+          if (_swaps.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.refresh, color: Colors.orange, size: 28),
+              onPressed: _undoAll,
+              tooltip: "Reset All",
+            )
         ],
       ),
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator())
         : Column(
             children: [
-               // Interaction Banner
-               if (_sourceKey != null)
-                  Container(
-                    width: double.infinity,
-                    color: Colors.blue.shade50,
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.touch_app, size: 16, color: Colors.blue),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text.rich(
-                            TextSpan(
-                              children: [
-                                const TextSpan(text: "Select target to swap "),
-                                TextSpan(text: _sourceKey!, style: const TextStyle(fontWeight: FontWeight.bold)),
-                              ]
-                            ),
-                            style: TextStyle(color: Colors.blue.shade900, fontSize: 13),
-                          ),
-                        ),
-                        TextButton(
-                           onPressed: () => setState(() => _sourceKey = null),
-                           child: const Text("Cancel"),
-                        )
-                      ],
-                    ),
-                  ),
-
                Expanded(
-                 child: Row(
-                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                   children: [
-                      // LEFT: Schematic Stickyt
-                      Container(
-                        width: 140, // Fixed narrow width for schematic
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          border: Border(right: BorderSide(color: Colors.grey.shade200))
-                        ),
-                        child: TyreSchematic(
-                           layout: layout, 
-                           selectedKeys: [_sourceKey].whereType<String>().toList(),
-                           onTyreTap: _handleTyreTap,
-                        ),
-                      ),
-                      
-                      // RIGHT: Manifest Grid
-                      Expanded(
-                        child: ListView(
-                          padding: const EdgeInsets.all(16),
-                          children: [
-                             Text("Active Configuration", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey.shade500, letterSpacing: 1)),
-                             const SizedBox(height: 12),
-                             
-                             Wrap(
-                               spacing: 12,
-                               runSpacing: 12,
-                               children: expectedKeys.map((k) {
-                                  // Find details
-                                  final d = _tyreDetails[k] ?? {};
-                                  final isSel = _sourceKey == k;
-                                  
-                                  return SizedBox(
-                                    width: 160, // Fixed Card Width
-                                    height: 110,
-                                    child: TyreSlotCard(
-                                      positionKey: k,
-                                      details: d,
-                                      isSelected: isSel,
-                                      isSource: _sourceKey != null,
-                                      onTap: () => _handleTyreTap(k),
-                                    ),
-                                  );
-                               }).toList(),
-                             ),
-                             
-                             const SizedBox(height: 100), // Bottom padding for FAB/Button
-                          ],
-                        ),
-                      )
-                   ],
+                 child: Container(
+                   color: theme.scaffoldBackgroundColor, // Seamless background
+                   child: TyreSchematic(
+                      layout: layout, 
+                      selectedKeys: const [], 
+                      onTyreSwap: _handleTyreSwap,
+                      onTyreTap: _handleTyreTap,
+                      tyreDetailsLookup: _tyreDetails,
+                   ),
                  ),
                ),
                
@@ -345,22 +358,25 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
                Container(
                  padding: const EdgeInsets.all(16),
                  decoration: BoxDecoration(
-                   color: Colors.white,
-                   boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), offset: const Offset(0, -4), blurRadius: 16)]
+                   color: theme.cardColor,
+                   boxShadow: [BoxShadow(color: isDark ? Colors.black26 : Colors.black.withOpacity(0.05), offset: const Offset(0, -4), blurRadius: 16)]
                  ),
-                 child: SizedBox(
-                   width: double.infinity,
-                   child: ElevatedButton(
-                     onPressed: _swaps.isEmpty ? null : _saveChanges,
-                     style: ElevatedButton.styleFrom(
-                       padding: const EdgeInsets.symmetric(vertical: 16),
-                       backgroundColor: Colors.blue.shade700,
-                       disabledBackgroundColor: Colors.grey.shade300,
-                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                 child: SafeArea(
+                   top: false,
+                   child: SizedBox(
+                     width: double.infinity,
+                     child: ElevatedButton(
+                       onPressed: _swaps.isEmpty ? null : _saveChanges,
+                       style: ElevatedButton.styleFrom(
+                         padding: const EdgeInsets.symmetric(vertical: 16),
+                         backgroundColor: theme.primaryColor,
+                         disabledBackgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
+                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                       ),
+                       child: _isSaving 
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
+                          : Text(_swaps.isEmpty ? "No Changes" : "Save ${_swaps.length} Changes", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                      ),
-                     child: _isSaving 
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
-                        : Text(_swaps.isEmpty ? "No Changes" : "Save ${_swaps.length} Changes", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                    ),
                  ),
                )
@@ -369,7 +385,6 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
     );
   }
 
-  // Helper to generate full list of expected keys based on layout
   List<String> _generateExpectedKeys(Map<String, dynamic> layout) {
       List<String> keys = [];
       final axles = layout['wheelsByAxle'] as List<dynamic>? ?? [];
@@ -386,7 +401,6 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
              keys.add("A$axleNum-RI");
              keys.add("A$axleNum-RO");
          } else {
-             // generic
              for(int k=0; k<count; k++) keys.add("A$axleNum-W${k+1}");
          }
       }
@@ -395,7 +409,6 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
   
   List<String> _getAllPossibleKeys(Map<String, dynamic> layout) {
      final valid = _generateExpectedKeys(layout);
-     // Also include any extra keys found in details but not in layout (e.g. spares SP1)
      final extras = _tyreDetails.keys.where((k) => !valid.contains(k)).toList();
      return [...valid, ...extras];
   }
