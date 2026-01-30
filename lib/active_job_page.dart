@@ -14,6 +14,7 @@ import 'package:drivara_driver_app/widgets/expense_list_sheet.dart';
 import 'package:drivara_driver_app/widgets/action_button_card.dart';
 import 'package:drivara_driver_app/widgets/stop_action_sheet.dart';
 import 'package:drivara_driver_app/pages/tyre_management_page.dart';
+import 'leaderboard_page.dart';
 import 'api_config.dart';
 import 'providers/localization_provider.dart';
 import 'no_job_page.dart';
@@ -229,7 +230,9 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
               'heading': _parseNum(data['heading'])?.toDouble() ?? 0.0
            };
            newVehicle['speed_kmh'] = _parseNum(data['speed']) ?? 0;
+           newVehicle['speed_kmh'] = _parseNum(data['speed']) ?? 0;
            newVehicle['odometer_km'] = data['odometer'] ?? newVehicle['odometer_km'];
+           if (data['vehicleNumber'] != null) newVehicle['vehicleNumber'] = data['vehicleNumber'];
            
            if (_dashboardData == null) _dashboardData = {};
            _dashboardData!['vehicle'] = newVehicle;
@@ -921,6 +924,21 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+
+
+                   // 0. Leaderboard (Shortcut)
+                   FloatingActionButton(
+                        heroTag: "leaderboardBtn",
+                        onPressed: () {
+                           Navigator.push(context, MaterialPageRoute(builder: (_) => const LeaderboardPage()));
+                        },
+                        mini: true,
+                        backgroundColor: Colors.teal,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: const Icon(Icons.leaderboard, color: Colors.white),
+                   ),
+                   const SizedBox(height: 12),
+
                    // 1. Recenter / Navigation Button
                    FloatingActionButton(
                         heroTag: "recenterBtn",
@@ -996,6 +1014,9 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                         child: const Icon(Icons.list_alt, color: Colors.white),
                    ),
 
+
+
+
                    const SizedBox(height: 12),
 
                    // 6. Tyre Management
@@ -1007,26 +1028,39 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                            // Assuming they are available in _dashboardData['vehicle']
                            if (_dashboardData != null && _dashboardData!['vehicle'] != null) {
                               final v = _dashboardData!['vehicle'];
+                              debugPrint("TyreBtn Check: Vehicle Data: $v"); // DEBUG
                               // Vehicle ID check with fallback
                               if (v['id'] == null && _job['vehicle_id'] == null) {
                                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Vehicle details not fully loaded yet")));
                                   return;
                               }
                               
+                              String regNum = 'Unknown';
+                              if (v['registrationNumber'] != null) regNum = v['registrationNumber'];
+                              else if (v['vehicleNumber'] != null) regNum = v['vehicleNumber'];
+                              else if (v['registration_number'] != null) regNum = v['registration_number'];
+                              else if (v['vehicle_number'] != null) regNum = v['vehicle_number'];
+                              else if (v['plate_number'] != null) regNum = v['plate_number'];
+                              else if (v['registration_no'] != null) regNum = v['registration_no'];
+                              else if (v['reg_no'] != null) regNum = v['reg_no'];
+                              else if (v['name'] != null) regNum = v['name']; // Fallback to name if generic
+
                               Navigator.push(context, MaterialPageRoute(builder: (_) => TyreManagementPage(
                                   vehicleId: v['id'] ?? _job['vehicle_id'],
-                                  registrationNumber: v['registrationNumber'] ?? 'Unknown',
+                                  registrationNumber: regNum,
                                   orgId: _job['org_id']
                               )));
                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please wait for dashboard data...")));
+                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please wait for dashboard data...")));
                            }
                         },
                         mini: true,
                         backgroundColor: Colors.blueGrey,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        child: const Icon(Icons.settings_suggest, color: Colors.white),
+                        child: const Icon(Icons.car_repair, color: Colors.white),
                    ),
+
+
                 ],
               ),
             ),
@@ -1159,10 +1193,12 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                                                 )
                                              ],
                                            );
-                                        }
-                                      ),
-                                    ],
-                                  ),
+                                      }
+                                    ),
+                                    
+
+                                  ],
+                                ),
                               ),
                              ],
                            ),
@@ -1395,10 +1431,8 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                                             }
                                        }
                                    } else {
-                                    // 2. Default: SSE Data
-                                       actions = (_dashboardData?['route'] != null && _dashboardData!['route']['available_actions'] != null) 
-                                          ? (_dashboardData!['route']['available_actions'] as List).cast<Map<String, dynamic>>()
-                                          : <Map<String, dynamic>>[];
+                                    // 2. Default: No generic actions if no stop selected (User Req)
+                                       actions = []; 
                                    }
 
                                    // USER REQ: "Once the last stop's load is unloaded, it should by default show complete action"
@@ -1494,7 +1528,17 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                                    // USER REQ: "still OFF ROUTE WARNING shows, it should not show when Driver completes it."
                                    // Logic: If ready to complete, we might be far effectively (since we are done), but we shouldn't warn.
                                    
-                                   bool showDistanceWarning = tooFar && !_isReadyToComplete();
+                                   // Strict Radius & Selection Logic
+                                   // "Do nothing, if > allowed action radius" -> Hide everything
+                                   // "No action until any place is clicked" -> Hide everything if no selection
+                                   
+                                   if (tooFar || _selectedStopIndex == null) {
+                                      return const SizedBox.shrink();
+                                   }
+                                   
+                                   // If we are here, we have a selection AND are within radius.
+                                   // Show status bar or nothing? 
+                                   // If 'actions' is empty (e.g. pending status but within radius), show status info.
 
                                    return Container(
                                        width: double.infinity,
@@ -1508,34 +1552,18 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                                            child: Row(
                                                mainAxisAlignment: MainAxisAlignment.center,
                                                children: [
-                                                   if (_selectedStopIndex != null) ...[
-                                                        Icon(showDistanceWarning ? Icons.error_outline : Icons.info_outline, color: showDistanceWarning ? Colors.orangeAccent : Colors.white),
-                                                        const SizedBox(width: 8),
-                                                        Text(
-                                                            showDistanceWarning 
-                                                              ? "Distance: ${distKm.toStringAsFixed(1)} km > ${kAllowedActionRadiusKm.toStringAsFixed(0)} km\nYou are too far from the location."
-                                                              : "Stop ${_selectedStopIndex! + 1}: ${stopStatus.toUpperCase()}", 
-                                                            style: AppTextStyles.header.copyWith(fontSize: 16),
-                                                            textAlign: TextAlign.center,
-                                                        ),
-                                                        const SizedBox(width: 8),
-                                                        TextButton(
-                                                            onPressed: () => setState(() => _selectedStopIndex = null),
-                                                            child: const Text("Back", style: TextStyle(color: Colors.white70))
-                                                        )
-                                                   ] else ...[
-                                                       Lottie.network(
-                                                         'https://lottie.host/98692795-0373-455f-8706-53867664871e/9R1k6e3v41.json', 
-                                                         width: 40, 
-                                                         height: 40,
-                                                         errorBuilder: (context, error, stackTrace) => const Icon(Icons.trip_origin, color: Colors.white),
-                                                       ),
-                                                       const SizedBox(width: 8),
-                                                       Text(
-                                                           t.t('trip_in_progress'),
-                                                           style: AppTextStyles.header.copyWith(fontSize: 16),
-                                                       ),
-                                                   ]
+                                                    Icon(Icons.info_outline, color: Colors.white),
+                                                    const SizedBox(width: 8),
+                                                    Text(
+                                                        "Stop ${_selectedStopIndex! + 1}: ${stopStatus.toUpperCase()}", 
+                                                        style: AppTextStyles.header.copyWith(fontSize: 16),
+                                                        textAlign: TextAlign.center,
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    TextButton(
+                                                        onPressed: () => setState(() => _selectedStopIndex = null),
+                                                        child: const Text("Back", style: TextStyle(color: Colors.white70))
+                                                    )
                                                ],
                                            ),
                                        ),
@@ -1577,6 +1605,44 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                           )
                         ],
                       ),
+                      
+                      // Fuel PIN (In Header)
+                      Builder(builder: (context) {
+                        final pin = _job['fuel_card_pin'] ?? _job['pin'] ?? _dashboardData?['vehicle']?['fuel_card_pin'] ?? _dashboardData?['vehicle']?['pin'];
+                        if (pin != null) {
+                            return FutureBuilder<String?>(
+                               future: ApiConfig.getDriverId(),
+                               builder: (ctx, snap) {
+                                  if (!snap.hasData) return const SizedBox.shrink();
+                                  final myId = snap.data;
+                                  final curId = _job['current_driver_id'] ?? _job['driver_id'];
+                                  
+                                  if (myId == curId) {
+                                      return Container(
+                                         margin: const EdgeInsets.only(left: 12),
+                                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                         decoration: BoxDecoration(
+                                            color: Theme.of(context).cardTheme.color?.withOpacity(0.9),
+                                            borderRadius: BorderRadius.circular(16),
+                                            border: Border.all(color: AppColors.primary.withOpacity(0.3))
+                                         ),
+                                         child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                                Icon(Icons.local_gas_station, size: 16, color: AppColors.primary),
+                                                const SizedBox(width: 4),
+                                                Text("$pin", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 14))
+                                            ]
+                                         )
+                                      );
+                                  }
+                                  return const SizedBox.shrink();
+                               }
+                            );
+                        }
+                        return const SizedBox.shrink();
+                      }),
+
                       Row(
                         children: [
                           IconButton(

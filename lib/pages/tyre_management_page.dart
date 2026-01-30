@@ -26,6 +26,7 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
   bool _isLoading = true;
   bool _isSaving = false;
   Map<String, dynamic> _tyreDetails = {};
+  String _registrationNumber = "";
   
   // Interaction State
   String? _sourceKey;
@@ -34,6 +35,7 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
   @override
   void initState() {
     super.initState();
+    _registrationNumber = widget.registrationNumber;
     _fetchVehicleDetails();
   }
 
@@ -51,18 +53,26 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
           }
       }
       
-      if (orgId == null) throw "Organization ID not found";
+      if (orgId == null) throw Provider.of<LocalizationProvider>(context, listen: false).t('org_id_error') ?? "Organization ID not found";
       
       final res = await ApiConfig.dio.get('/orgs/$orgId/vehicles/${widget.vehicleId}');
       
       setState(() {
         _tyreDetails = Map<String, dynamic>.from(res.data['tyreDetails'] ?? {});
+        // Update registration number if available and current is Unknown or empty
+        if (_registrationNumber == "Unknown" || _registrationNumber.isEmpty) {
+            if (res.data['registrationNumber'] != null) _registrationNumber = res.data['registrationNumber'];
+            else if (res.data['registration_number'] != null) _registrationNumber = res.data['registration_number'];
+            else if (res.data['vehicle_number'] != null) _registrationNumber = res.data['vehicle_number'];
+            else if (res.data['reg_no'] != null) _registrationNumber = res.data['reg_no'];
+        }
         _isLoading = false;
       });
     } catch (e) {
       debugPrint("Error fetching vehicle: $e");
       if (mounted) {
-         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to load vehicle: $e")));
+         final t = Provider.of<LocalizationProvider>(context, listen: false);
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("${t.t('failed_load_vehicle')}$e")));
          setState(() => _isLoading = false);
       }
     }
@@ -109,7 +119,7 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
     
     try {
         final orgId = widget.orgId; // Assuming passed or we throw
-        if (orgId == null) throw "Org ID missing";
+        if (orgId == null) throw Provider.of<LocalizationProvider>(context, listen: false).t('org_id_error') ?? "Org ID missing";
         
         await ApiConfig.dio.post(
            '/orgs/$orgId/vehicles/${widget.vehicleId}', 
@@ -121,7 +131,7 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
            Navigator.pop(context);
         }
     } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error saving: $e")));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("${t.t('error_saving')}$e")));
     } finally {
         if (mounted) setState(() => _isSaving = false);
     }
@@ -281,7 +291,7 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
                           return ListTile(
                             leading: Icon(hasTyre ? Icons.circle : Icons.radio_button_unchecked, color: hasTyre ? theme.iconTheme.color : Colors.grey),
                             title: Text(target, style: TextStyle(fontWeight: FontWeight.bold, color: theme.textTheme.bodyLarge?.color)),
-                            subtitle: Text(hasTyre ? "${details['brand']} ${details['serial']}" : "Empty Slot", style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7))),
+                            subtitle: Text(hasTyre ? "${details['brand']} ${details['serial']}" : loc.t('empty_slot'), style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7))),
                             onTap: () {
                                Navigator.pop(ctx);
                                _handleTyreSwap(sourceKey, target);
@@ -325,7 +335,7 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
         elevation: 0,
         backgroundColor: theme.cardColor,
         centerTitle: true,
-        title: Text(widget.registrationNumber, style: TextStyle(color: theme.textTheme.titleLarge?.color, fontWeight: FontWeight.bold)),
+        title: Text(_registrationNumber, style: TextStyle(color: theme.textTheme.titleLarge?.color, fontWeight: FontWeight.bold)),
         iconTheme: theme.iconTheme,
         actions: [
           // Reset Button (Undo Icon)
@@ -333,7 +343,7 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
             IconButton(
               icon: const Icon(Icons.refresh, color: Colors.orange, size: 28),
               onPressed: _undoAll,
-              tooltip: "Reset All",
+              tooltip: loc.t('reset_all'),
             )
         ],
       ),
@@ -375,7 +385,12 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
                        ),
                        child: _isSaving 
                           ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
-                          : Text(_swaps.isEmpty ? "No Changes" : "Save ${_swaps.length} Changes", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                          : Text(
+                              _swaps.isEmpty 
+                                ? loc.t('no_changes') 
+                                : loc.t('save_changes').replaceAll('{count}', _swaps.length.toString()),
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)
+                            ),
                      ),
                    ),
                  ),

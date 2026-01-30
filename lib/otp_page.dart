@@ -82,10 +82,10 @@ class _OtpPageState extends State<OtpPage> {
         // 2. Fetch Active Job
         await _checkActiveJob();
       } else {
-        setState(() => _error = response.data['message'] ?? 'Verification failed');
+        setState(() => _error = response.data['message'] ?? Provider.of<LocalizationProvider>(context, listen: false).t('verification_failed'));
       }
     } on DioException catch (e) {
-      setState(() => _error = e.response?.data['message'] ?? e.message ?? 'Network error');
+      setState(() => _error = e.response?.data['message'] ?? e.message ?? Provider.of<LocalizationProvider>(context, listen: false).t('network_error'));
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -112,7 +112,7 @@ class _OtpPageState extends State<OtpPage> {
         );
       }
     } catch (e) {
-      setState(() => _error = "Failed to fetch job status: \$e");
+      setState(() => _error = "${Provider.of<LocalizationProvider>(context, listen: false).t('fetch_job_error')}$e");
     }
   }
 
@@ -143,8 +143,8 @@ class _OtpPageState extends State<OtpPage> {
                    Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text("Drivara", style: AppTextStyles.header.copyWith(fontSize: 32, height: 1, color: Theme.of(context).textTheme.bodyLarge?.color)),
-                      Text("DRIVER", style: AppTextStyles.label.copyWith(fontSize: 14, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6), letterSpacing: 4)),
+                      Text(t.t('login_title'), style: AppTextStyles.header.copyWith(fontSize: 32, height: 1, color: Theme.of(context).textTheme.bodyLarge?.color)),
+                      Text(t.t('driver_role'), style: AppTextStyles.label.copyWith(fontSize: 14, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6), letterSpacing: 4)),
                     ],
                    )
                 ],
@@ -160,7 +160,7 @@ class _OtpPageState extends State<OtpPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Sent to ${widget.phone}',
+              '${t.t('otp_sent_to')} ${widget.phone}',
               style: AppTextStyles.body.copyWith(color: Theme.of(context).textTheme.bodyMedium?.color),
             ),
             const SizedBox(height: 48),
