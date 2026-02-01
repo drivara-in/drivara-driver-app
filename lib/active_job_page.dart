@@ -488,11 +488,33 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
              return;
          }
          else if (action == 'reached') msg = t.t('location_reached');
-         else if (action == 'start_action') msg = t.t('loading_started'); 
-         else if (action == 'complete_action') msg = t.t('loading_completed');
+         else if (action == 'start_action') {
+             final label = body != null ? body['label'].toString().toLowerCase() : '';
+             if (label.contains('unload')) {
+                 msg = t.t('action_unloading') ?? 'Unloading Started'; 
+             } else {
+                 msg = t.t('loading_started'); 
+             }
+         }
+         else if (action == 'complete_action') {
+             final label = body != null ? body['label'].toString().toLowerCase() : '';
+             if (label.contains('unload')) {
+                 msg = t.t('action_unloaded') ?? 'Unloading Completed'; 
+             } else {
+                 msg = t.t('loading_completed'); 
+             }
+         }
          else if (action == 'depart') msg = t.t('departed');
 
-         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green));
+         // Dynamic Color Logic
+         Color snackColor = Colors.green;
+         if (action == 'start_action') {
+             final label = body != null ? body['label'].toString().toLowerCase() : '';
+             if (label.contains('unload')) snackColor = Colors.orange; // Distinct for Unload
+             else snackColor = Colors.blue; // Distinct for Load
+         }
+
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: snackColor));
          _fetchDashboardData(); 
       } else {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(response.data['message'] ?? "Action failed")));
