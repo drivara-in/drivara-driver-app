@@ -1,8 +1,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'services/leaderboard_service.dart';
 import 'api_config.dart';
+import 'providers/localization_provider.dart';
 
 class LeaderboardPage extends StatefulWidget {
   const LeaderboardPage({super.key});
@@ -47,10 +49,11 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    final loc = Provider.of<LocalizationProvider>(context);
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text('Leaderboard', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Text(loc.t('leaderboard'), style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
@@ -68,11 +71,11 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               children: [
-                _buildFilterChip('This Month', LeaderboardPeriod.month),
+                _buildFilterChip(loc.t('this_month'), LeaderboardPeriod.month),
                 const SizedBox(width: 12),
-                _buildFilterChip('This Week', LeaderboardPeriod.week),
+                _buildFilterChip(loc.t('this_week'), LeaderboardPeriod.week),
                 const SizedBox(width: 12),
-                _buildFilterChip('All Time', LeaderboardPeriod.all),
+                _buildFilterChip(loc.t('all_time'), LeaderboardPeriod.all),
               ],
             ),
           ),
@@ -81,7 +84,7 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _entries.isEmpty 
-                    ? Center(child: Text("No drivers found", style: GoogleFonts.inter(color: Colors.white54)))
+                    ? Center(child: Text(loc.t('no_drivers_found'), style: GoogleFonts.inter(color: Colors.white54)))
                     : ListView.builder(
                         padding: const EdgeInsets.all(16),
                         itemCount: _entries.length,
@@ -147,7 +150,7 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                                       ),
                                       if (isMe)
                                         Text(
-                                          'You',
+                                          loc.t('you'),
                                           style: GoogleFonts.inter(
                                             color: Colors.green,
                                             fontSize: 12,

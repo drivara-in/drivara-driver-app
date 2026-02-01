@@ -199,6 +199,13 @@ class LocalizationProvider extends ChangeNotifier {
       'error_saving': 'Error saving: ',
       'empty_slot': 'Empty Slot',
       'reset_all': 'Reset All',
+      // Leaderboard
+      'leaderboard': 'Leaderboard',
+      'this_month': 'This Month',
+      'this_week': 'This Week',
+      'all_time': 'All Time',
+      'no_drivers_found': 'No drivers found',
+      'you': 'You',
     },
     'hi': {
       'login_title': 'Drivara Driver',
@@ -356,6 +363,13 @@ class LocalizationProvider extends ChangeNotifier {
       'error_saving': 'सहेजने में त्रुटि: ',
       'empty_slot': 'खाली स्लॉट',
       'reset_all': 'सभी रीसेट करें',
+      // Leaderboard
+      'leaderboard': 'लीडरबोर्ड',
+      'this_month': 'इस महीने',
+      'this_week': 'इस सप्ताह',
+      'all_time': 'सभी समय',
+      'no_drivers_found': 'कोई ड्राइवर नहीं मिला',
+      'you': 'आप',
     },
     'te': { // Telugu
       'login_title': 'Drivara Driver',
@@ -509,6 +523,13 @@ class LocalizationProvider extends ChangeNotifier {
       'error_saving': 'సేవ్ చేయడంలో లోపం: ',
       'empty_slot': 'ఖాళీ స్లాట్',
       'reset_all': 'అన్నీ రీసెట్ చేయండి',
+      // Leaderboard
+      'leaderboard': 'లీడర్‌బోర్డ్',
+      'this_month': 'ఈ నెల',
+      'this_week': 'ఈ వారం',
+      'all_time': 'అన్ని సమయాలు',
+      'no_drivers_found': 'డ్రైవర్లు కనుగొనబడలేదు',
+      'you': 'మీరు',
     },
     'ml': { // Malayalam
       'login_title': 'Drivara Driver',
@@ -658,6 +679,13 @@ class LocalizationProvider extends ChangeNotifier {
       'error_saving': 'സംരക്ഷിക്കുന്നതിൽ പിശക്: ',
       'empty_slot': 'ശൂന്യമായ സ്ലോട്ട്',
       'reset_all': 'എല്ലാം റീസെറ്റ് ചെയ്യുക',
+      // Leaderboard
+      'leaderboard': 'ലീഡർബോർഡ്',
+      'this_month': 'ഈ മാസം',
+      'this_week': 'ഈ ആഴ്ച',
+      'all_time': 'എല്ലാ കാലവും',
+      'no_drivers_found': 'ഡ്രൈവർമാരെ കണ്ടെത്തിയില്ല',
+      'you': 'നിങ്ങൾ',
     },
     'kn': { // Kannada
       'login_title': 'Drivara Driver',
@@ -811,6 +839,13 @@ class LocalizationProvider extends ChangeNotifier {
       'error_saving': 'ಉಳಿಸುವಲ್ಲಿ ದೋಷ: ',
       'empty_slot': 'ಖಾಲಿ ಸ್ಲಾಟ್',
       'reset_all': 'ಎಲ್ಲವನ್ನೂ ಮರುಹೊಂದಿಸಿ',
+      // Leaderboard
+      'leaderboard': 'ಲೀಡರ್‌ಬೋರ್ಡ್',
+      'this_month': 'ಈ ತಿಂಗಳು',
+      'this_week': 'ಈ ವಾರ',
+      'all_time': 'ಎಲ್ಲಾ ಸಮಯ',
+      'no_drivers_found': 'ಯಾವುದೇ ಚಾಲಕರು ಕಂಡುಬಂದಿಲ್ಲ',
+      'you': 'ನೀವು',
     },
     'ta': { // Tamil
       'login_title': 'Drivara Driver',
@@ -964,6 +999,13 @@ class LocalizationProvider extends ChangeNotifier {
       'close': 'மூடு',
       'save_changes': '{count} மாற்றங்களைச் சேமி',
       'no_changes': 'மாற்றங்கள் இல்லை',
+      // Leaderboard
+      'leaderboard': 'லீடர்போர்டு',
+      'this_month': 'இந்த மாதம்',
+      'this_week': 'இந்த வாரம்',
+      'all_time': 'எல்லா காலமும்',
+      'no_drivers_found': 'ஓட்டுநர்கள் யாரும் இல்லை',
+      'you': 'நீங்கள்',
     },
   };
 
