@@ -1406,11 +1406,11 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                                            } else if (status == 'reached') {
                                                 if (type == 'loading' && stop['action_completed_at'] == null) {
                                                     if (!tooFar) {
-                                                        actions.add({'action': 'start_action', 'label': t.t('action_loading') ?? 'Load', 'stopIndex': _selectedStopIndex});
+                                                        actions.add({'action': 'start_action', 'label': 'Load', 'stopIndex': _selectedStopIndex});
                                                     }
                                                 } else if (type == 'unloading' && stop['action_completed_at'] == null) {
                                                     if (!tooFar) {
-                                                        actions.add({'action': 'start_action', 'label': t.t('action_unloading') ?? 'Unload', 'stopIndex': _selectedStopIndex});
+                                                        actions.add({'action': 'start_action', 'label': 'Unload', 'stopIndex': _selectedStopIndex});
                                                     }
                                                 } else {
                                                     // Restriction applies to Depart OR Complete
@@ -1425,7 +1425,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                                             } else if (status == 'action_in_progress') {
                                                 // Restriction applies to Complete (EPOD)
                                                 if (!tooFar) {
-                                                    String label = type == 'loading' ? (t.t('action_loaded') ?? 'Loaded') : (t.t('action_unloaded') ?? 'Unloaded');
+                                                    String label = type == 'loading' ? 'Loaded' : 'Unloaded';
                                                     actions.add({'action': 'complete_action', 'label': label, 'stopIndex': _selectedStopIndex});
                                                 }
                                             }
