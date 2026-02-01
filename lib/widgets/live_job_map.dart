@@ -39,6 +39,7 @@ class _LiveJobMapState extends State<LiveJobMap> {
   LatLng? _lastVehiclePos;
   double _lastHeading = 0.0;
   bool _isCameraInitialized = false;
+  bool _isProgrammaticMove = false; // Track programmatic camera moves
 
   // Navigation Override State
   LatLng? _overrideDestPos;
@@ -275,8 +276,13 @@ class _LiveJobMapState extends State<LiveJobMap> {
       bearing: heading,
     ));
 
+    _isProgrammaticMove = true; // Mark as programmatic move
     controller.animateCamera(cameraUpdate);
     _isCameraInitialized = true;
+    // Reset flag after a short delay to allow the animation to start
+    Future.delayed(const Duration(milliseconds: 100), () {
+      _isProgrammaticMove = false;
+    });
   }
 
   void updateDestination(LatLng point, String name, {List<LatLng>? routePoints}) {
@@ -383,8 +389,8 @@ class _LiveJobMapState extends State<LiveJobMap> {
         }
       },
       onCameraMoveStarted: () {
-          // If user touches map, stop auto-following
-          if (_following) {
+          // Only disable following if this is a user-initiated move, not programmatic
+          if (_following && !_isProgrammaticMove) {
              setState(() => _following = false);
           }
       },
