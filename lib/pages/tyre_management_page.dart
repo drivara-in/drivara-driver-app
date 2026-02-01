@@ -26,11 +26,12 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
   bool _isLoading = true;
   bool _isSaving = false;
   Map<String, dynamic> _tyreDetails = {};
+  Map<String, dynamic> _baselineTyreDetails = {}; // Original state from API
   String _registrationNumber = "";
   
   // Interaction State
   String? _sourceKey;
-  List<Map<String, String>> _swaps = [];
+  List<Map<String, String>> _swaps = []; // Track for undo/display purposes
 
   @override
   void initState() {
@@ -59,6 +60,8 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
       
       setState(() {
         _tyreDetails = Map<String, dynamic>.from(res.data['tyreDetails'] ?? {});
+        // Deep copy baseline for dirty check
+        _baselineTyreDetails = Map<String, dynamic>.from(_tyreDetails.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v is Map ? v : {}))));
         // Update registration number if available and current is Unknown or empty
         if (_registrationNumber == "Unknown" || _registrationNumber.isEmpty) {
             if (res.data['registrationNumber'] != null) _registrationNumber = res.data['registrationNumber'];
@@ -111,6 +114,27 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
        _isLoading = true;
     });
     _fetchVehicleDetails(); // Simplest reset
+  }
+
+  bool _hasChanges() {
+    // Compare current state with baseline to detect actual changes
+    // Check if all keys have the same tyre (by comparing critical fields like serial/id)
+    final allKeys = {..._tyreDetails.keys, ..._baselineTyreDetails.keys};
+    
+    for (final key in allKeys) {
+      final current = _tyreDetails[key] ?? {};
+      final baseline = _baselineTyreDetails[key] ?? {};
+      
+      // Compare by serial number or tyre_id (unique identifiers)
+      final currentSerial = current['serial'] ?? current['tyre_id'] ?? '';
+      final baselineSerial = baseline['serial'] ?? baseline['tyre_id'] ?? '';
+      
+      if (currentSerial != baselineSerial) {
+        return true; // Found a difference
+      }
+    }
+    
+    return false; // No changes
   }
 
   Future<void> _saveChanges() async {
@@ -376,7 +400,7 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
                    child: SizedBox(
                      width: double.infinity,
                      child: ElevatedButton(
-                       onPressed: _swaps.isEmpty ? null : _saveChanges,
+                       onPressed: !_hasChanges() ? null : _saveChanges,
                        style: ElevatedButton.styleFrom(
                          padding: const EdgeInsets.symmetric(vertical: 16),
                          backgroundColor: theme.primaryColor,
@@ -386,7 +410,7 @@ class _TyreManagementPageState extends State<TyreManagementPage> {
                        child: _isSaving 
                           ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
                           : Text(
-                              _swaps.isEmpty 
+                              !_hasChanges()
                                 ? loc.t('no_changes') 
                                 : loc.t('save_changes').replaceAll('{count}', _swaps.length.toString()),
                               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)
