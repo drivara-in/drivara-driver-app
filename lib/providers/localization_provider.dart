@@ -299,7 +299,7 @@ class LocalizationProvider extends ChangeNotifier {
       'label_end': 'समाप्त',
       // Actions
       'action_loading': 'लोडिंग शुरू करें',
-      'action_unloading': 'अनलोडिंग शुरू करें',
+      'action_unloading': 'अनलोड करें',
       'action_loaded': 'लोडिंग समाप्त',
       'action_loaded': 'लोडिंग समाप्त',
       'action_unloaded': 'अनलोडिंग समाप्त',
@@ -463,7 +463,7 @@ class LocalizationProvider extends ChangeNotifier {
       'label_end': 'ముగించు',
       // Actions
       'action_loading': 'లోడింగ్ ప్రారంభించండి',
-      'action_unloading': 'అన్లోడింగ్ ప్రారంభించండి',
+      'action_unloading': 'అన్లోడ్ చేయండి',
       'action_loaded': 'లోడింగ్ పూర్తయింది',
       'action_unloaded': 'అన్లోడింగ్ పూర్తయింది',
       'loading_started': 'లోడింగ్ ప్రారంభించబడింది',
@@ -620,7 +620,7 @@ class LocalizationProvider extends ChangeNotifier {
       'bill_image_opt': 'ബിൽ ചിത്രം (ഓപ്ഷണൽ)',
       // Actions
       'action_loading': 'ലോഡിംഗ് തുടങ്ങുക',
-      'action_unloading': 'അൺലോഡിംഗ് തുടങ്ങുക',
+      'action_unloading': 'ഇറക്കുക',
       'action_loaded': 'ലോഡിംഗ് പൂർത്തിയായി',
       'action_unloaded': 'അൺലോഡിംഗ് പൂർത്തിയായി',
       'loading_started': 'ലോഡിംഗ് തുടങ്ങി',
@@ -779,7 +779,7 @@ class LocalizationProvider extends ChangeNotifier {
       'label_end': 'ಅಂತ್ಯ',
       // Actions
       'action_loading': 'ಲೋಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ',
-      'action_unloading': 'ಅನ್‌ಲೋಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ',
+      'action_unloading': 'ಅನ್‌ಲೋಡ್ ಮಾಡಿ',
       'action_loaded': 'ಲೋಡಿಂಗ್ ಪೂರ್ಣಗೊಂಡಿದೆ',
       'action_unloaded': 'ಅನ್‌ಲೋಡಿಂಗ್ ಪೂರ್ಣಗೊಂಡಿದೆ',
       'loading_started': 'ಲೋಡಿಂಗ್ ಪ್ರಾರಂಭವಾಗಿದೆ',
@@ -943,7 +943,7 @@ class LocalizationProvider extends ChangeNotifier {
       'label_end': 'முடிவு',
       // Actions
       'action_loading': 'ஏற்றத் தொடங்கு',
-      'action_unloading': 'இறக்கத் தொடங்கு',
+      'action_unloading': 'இறக்கு',
       'action_loaded': 'ஏற்றி முடிந்தது',
       'action_unloaded': 'இறக்கி முடிந்தது',
       'loading_started': 'ஏற்றத் தொடங்கியது',
@@ -1064,6 +1064,63 @@ class LocalizationProvider extends ChangeNotifier {
         'te': 'కొరియర్ ఛార్జీలు',
         'kn': 'ಕೊರಿಯರ್ ಶುಲ್ಕ',
         'ml': 'കൊറിയർ ചാർജ്'
+     },
+     // Requested Colloquial Overrides
+     'guide expense': {
+        'hi': 'गाइड',
+        'te': 'గైడ్',
+        'ta': 'கைடு',
+        'kn': 'ಗೈಡ್',
+        'ml': 'ഗൈഡ്'
+     },
+     'toll fine': {
+        'hi': 'टोल',
+        'te': 'టోల్',
+        'ta': 'டோல்',
+        'kn': 'ಟೋಲ್',
+        'ml': 'ടോൾ'
+     },
+     'association': {
+        'hi': 'यूनियन',
+        'te': 'యూనియన్',
+        'ta': 'சங்கம்',
+        'kn': 'ಸಂಘ',
+        'ml': 'യൂണിയൻ'
+     },
+     'association expense': {
+        'hi': 'यूनियन',
+        'te': 'యూనియన్',
+        'ta': 'சங்கம்',
+        'kn': 'ಸಂಘ',
+        'ml': 'യൂണിയൻ'
+     },
+     'mechanical': {
+        'hi': 'मैकेनिक',
+        'te': 'మెకానిక్',
+        'ta': 'மெக்கானிக்',
+        'kn': 'ಮೆಕ್ಯಾನಿಕ್',
+        'ml': 'മെക്കാനിക്ക്'
+     },
+     'mechanical expense': {
+        'hi': 'मैकेनिक',
+        'te': 'మెకానిక్',
+        'ta': 'மெக்கானிக்',
+        'kn': 'ಮೆಕ್ಯಾನಿಕ್',
+        'ml': 'മെക്കാനിക്ക്'
+     },
+     'weigh bridge': {
+        'hi': 'कांटा',
+        'te': 'వే బ్రిడ్జ్',
+        'ta': 'வெயிட் பிரிட்ஜ்',
+        'kn': 'ವೇ ಬ್ರಿಡ್ಜ್',
+        'ml': 'വെയ് ബ്രിഡ്ജ്'
+     },
+     'weigh bridge expense': {
+        'hi': 'कांटा',
+        'te': 'వే బ్రిడ్జ్',
+        'ta': 'வெயிட் பிரிட்ஜ்',
+        'kn': 'ವೇ ಬ್ರಿಡ್ಜ್',
+        'ml': 'വെയ് ബ്രിഡ്ജ്'
      }
   };
   
