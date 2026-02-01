@@ -127,7 +127,7 @@ class LocalizationProvider extends ChangeNotifier {
       'label_end': 'End',
       // Actions
       'action_loading': 'Start Loading',
-      'action_unloading': 'Start Unloading',
+      'action_unloading': 'Unloading Started',
       'action_loaded': 'Finished Loading',
       'action_unloaded': 'Finished Unloading',
       'loading_started': 'Action Started', // Generic or specific
@@ -299,7 +299,7 @@ class LocalizationProvider extends ChangeNotifier {
       'label_end': 'समाप्त',
       // Actions
       'action_loading': 'लोडिंग',
-      'action_unloading': 'अनलोडिंग',
+      'action_unloading': 'अनलोडिंग शुरू हुई',
       'action_loaded': 'लोडिंग समाप्त',
       'action_loaded': 'लोडिंग समाप्त',
       'action_unloaded': 'अनलोडिंग समाप्त',
@@ -463,7 +463,7 @@ class LocalizationProvider extends ChangeNotifier {
       'label_end': 'ముగించు',
       // Actions
       'action_loading': 'లోడింగ్',
-      'action_unloading': 'అన్లోడింగ్',
+      'action_unloading': 'అన్లోడింగ్ ప్రారంభించబడింది',
       'action_loaded': 'లోడింగ్ పూర్తయింది',
       'action_unloaded': 'అన్లోడింగ్ పూర్తయింది',
       'loading_started': 'లోడింగ్ ప్రారంభించబడింది',
@@ -620,7 +620,7 @@ class LocalizationProvider extends ChangeNotifier {
       'bill_image_opt': 'ബിൽ ചിത്രം (ഓപ്ഷണൽ)',
       // Actions
       'action_loading': 'ലോഡിംഗ്',
-      'action_unloading': 'അൺലോഡിംഗ്',
+      'action_unloading': 'അൺലോഡിംഗ് തുടങ്ങി',
       'action_loaded': 'ലോഡിംഗ് പൂർത്തിയായി',
       'action_unloaded': 'അൺലോഡിംഗ് പൂർത്തിയായി',
       'loading_started': 'ലോഡിംഗ് തുടങ്ങി',
@@ -779,7 +779,7 @@ class LocalizationProvider extends ChangeNotifier {
       'label_end': 'ಅಂತ್ಯ',
       // Actions
       'action_loading': 'ಲೋಡಿಂಗ್',
-      'action_unloading': 'ಅನ್‌ಲೋಡಿಂಗ್',
+      'action_unloading': 'ಅನ್‌ಲೋಡಿಂಗ್ ಪ್ರಾರಂಭವಾಗಿದೆ',
       'action_loaded': 'ಲೋಡಿಂಗ್ ಪೂರ್ಣಗೊಂಡಿದೆ',
       'action_unloaded': 'ಅನ್‌ಲೋಡಿಂಗ್ ಪೂರ್ಣಗೊಂಡಿದೆ',
       'loading_started': 'ಲೋಡಿಂಗ್ ಪ್ರಾರಂಭವಾಗಿದೆ',
@@ -943,7 +943,7 @@ class LocalizationProvider extends ChangeNotifier {
       'label_end': 'முடிவு',
       // Actions
       'action_loading': 'லோடிங்',
-      'action_unloading': 'அன்லோடிங்',
+      'action_unloading': 'இறக்கத் தொடங்கியது',
       'action_loaded': 'ஏற்றி முடிந்தது',
       'action_unloaded': 'இறக்கி முடிந்தது',
       'loading_started': 'ஏற்றத் தொடங்கியது',
