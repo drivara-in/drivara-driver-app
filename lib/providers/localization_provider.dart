@@ -1058,36 +1058,39 @@ class LocalizationProvider extends ChangeNotifier {
      },
      // Misc
      'tea': {'hi': 'चाय', 'ta': 'தேநீர்', 'te': 'టీ', 'kn': 'ಚಹಾ', 'ml': 'ചായ'},
-     'courier charges': {
-        'hi': 'कुरियर शुल्क',
-        'ta': 'கூரியர் செலவு',
-        'te': 'కొరియర్ ఛార్జీలు',
-        'kn': 'ಕೊರಿಯರ್ ಶುಲ್ಕ',
-        'ml': 'കൊറിയർ ചാർജ്'
-     },
-     // Requested Colloquial Overrides
-     'guide expense': {
+     
+     // Base Words (Transliterated/Localized)
+     // The generic logic handles " XYZ Expense" -> "XYZ Selavu" automatically
+     
+     'guide': {
         'hi': 'गाइड',
         'te': 'గైడ్',
         'ta': 'கைடு',
         'kn': 'ಗೈಡ್',
         'ml': 'ഗൈഡ്'
      },
-     'toll fine': {
+     'toll': {
         'hi': 'टोल',
         'te': 'టోల్',
         'ta': 'டோல்',
         'kn': 'ಟೋಲ್',
         'ml': 'ടോൾ'
      },
-     'association': {
-        'hi': 'यूनियन',
-        'te': 'యూనియన్',
-        'ta': 'சங்கம்',
-        'kn': 'ಸಂಘ',
-        'ml': 'യൂണിയൻ'
+     'forest officer': {
+        'hi': 'फॉरेस्ट ऑफिसर',
+        'te': 'ఫారెస్ట్ ఆఫీసర్',
+        'ta': 'பாரஸ்ட் ஆபீசர்',
+        'kn': 'ಫಾರೆಸ್ಟ್ ಆಫೀಸರ್',
+        'ml': 'ഫോറസ്റ്റ് ഓഫീസർ'
      },
-     'association expense': {
+     'grease': {
+        'hi': 'ग्रीस',
+        'te': 'గ్రీజు',
+        'ta': 'கிரீஸ்',
+        'kn': 'ಗ್ರೀಸ್',
+        'ml': 'ഗ്രീസ്'
+     },
+     'association': {
         'hi': 'यूनियन',
         'te': 'యూనియన్',
         'ta': 'சங்கம்',
@@ -1101,21 +1104,7 @@ class LocalizationProvider extends ChangeNotifier {
         'kn': 'ಮೆಕ್ಯಾನಿಕ್',
         'ml': 'മെക്കാനിക്ക്'
      },
-     'mechanical expense': {
-        'hi': 'मैकेनिक',
-        'te': 'మెకానిక్',
-        'ta': 'மெக்கானிக்',
-        'kn': 'ಮೆಕ್ಯಾನಿಕ್',
-        'ml': 'മെക്കാനിക്ക്'
-     },
      'weigh bridge': {
-        'hi': 'कांटा',
-        'te': 'వే బ్రిడ్జ్',
-        'ta': 'வெயிட் பிரிட்ஜ்',
-        'kn': 'ವೇ ಬ್ರಿಡ್ಜ್',
-        'ml': 'വെയ് ബ്രിഡ്ஜ்'
-     },
-     'weigh bridge expense': {
         'hi': 'कांटा',
         'te': 'వే బ్రిడ్జ్',
         'ta': 'வெயிட் பிரிட்ஜ்',
@@ -1126,15 +1115,24 @@ class LocalizationProvider extends ChangeNotifier {
         'hi': 'टीवीएस',
         'te': 'టీవీఎస్',
         'ta': 'டிவிஎஸ்',
-        'kn': 'ಟಿವಿಎಸ್',
+        'kn': 'ಟಿವಿஎஸ்',
         'ml': 'ടിവിഎസ്'
      },
-     'tvs expense': {
-        'hi': 'टीवीएस',
-        'te': 'టీవీఎస్',
-        'ta': 'டிவிஎஸ்',
-        'kn': 'ಟಿವಿಎಸ್',
-        'ml': 'ടിவிഎസ്'
+
+     // Specific Full Phrases (keep if suffix logic doesn't apply)
+     'courier charges': {
+        'hi': 'कुरियर शुल्क',
+        'ta': 'கூரியர் செலவு',
+        'te': 'కొరియర్ ఛార్జీలు',
+        'kn': 'ಕೊರಿಯರ್ ಶುಲ್ಕ',
+        'ml': 'കൊറിയർ ചാർஜ்'
+     },
+     'toll fine': {
+        'hi': 'टोल',
+        'te': 'టోల్',
+        'ta': 'டோல்',
+        'kn': 'ಟೋಲ್',
+        'ml': 'ടோல்'
      },
   };
   
