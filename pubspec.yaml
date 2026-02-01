@@ -78,8 +78,7 @@ flutter_launcher_icons:
   ios: true
   image_path: "assets/images/drivara-icon.png"
   min_sdk_android: 21
-  adaptive_icon_background: "#3B82F6" # Set to Primary Blue for correct color rendering
-  adaptive_icon_foreground: "assets/images/drivara-icon.png"
+  remove_alpha_ios: true
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
