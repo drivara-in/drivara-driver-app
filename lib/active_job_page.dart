@@ -416,23 +416,24 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     if (sheetActions.contains(action) && body != null && body['stopIndex'] != null) {
         final stopIndex = body['stopIndex'] as int;
         // Config Sheet
-        String title = "Confirm Action";
-        String uploadLabel = "Proof (Optional)";
+        final t = Provider.of<LocalizationProvider>(context, listen: false);
+        String title = t.t('dialog_title_confirm_action') ?? "Confirm Action";
+        String uploadLabel = t.t('proof_optional_label') ?? "Proof (Optional)";
         bool requireFile = false;
 
         if (action == 'reached') {
-           title = "Confirm Arrival";
-           uploadLabel = "Gate Entry / Proof";
+           title = t.t('dialog_title_confirm_arrival') ?? "Confirm Arrival";
+           uploadLabel = t.t('gate_entry_proof_label') ?? "Gate Entry / Proof";
         } else if (action == 'start_action') {
-           title = "Start Activity"; 
+           title = t.t('dialog_title_start_activity') ?? "Start Activity"; 
         } else if (action == 'complete_action') {
-           title = "Complete Activity"; 
-           uploadLabel = "Upload POD / Receipt";
+           title = t.t('dialog_title_complete_activity') ?? "Complete Activity"; 
+           uploadLabel = t.t('upload_proof_label') ?? "Upload POD / Receipt";
            requireFile = false; 
         } else if (action == 'depart') {
-           title = "Confirm Departure";
+           title = t.t('dialog_title_confirm_departure') ?? "Confirm Departure";
         } else if (action == 'complete') {
-           title = "Complete Trip";
+           title = t.t('dialog_title_complete_trip') ?? "Complete Trip";
         }
 
         await showModalBottomSheet(
@@ -487,7 +488,26 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
              Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const NoJobPage()));
              return;
          }
-         else if (action == 'reached') msg = t.t('location_reached');
+         else if (action == 'reached') {
+             msg = t.t('location_reached');
+             if (body != null && body['stopIndex'] != null) {
+                 try {
+                     final int idx = body['stopIndex'] is int ? body['stopIndex'] : int.parse(body['stopIndex'].toString());
+                     final stops = (_job['route_stops'] as List?) ?? [];
+                     if (idx < stops.length) {
+                         final stop = stops[idx];
+                         final type = (stop['type'] ?? stop['stop_type'] ?? '').toString().toLowerCase();
+                         if (type == 'loading') {
+                             msg = t.t('reached_loading_point');
+                         } else if (type == 'unloading') {
+                             msg = t.t('reached_unloading_point');
+                         }
+                     }
+                 } catch (e) {
+                     debugPrint("Error resolving stop type for message: $e");
+                 }
+             }
+         }
          else if (action == 'start_action') {
              final label = body != null ? body['label'].toString().toLowerCase() : '';
              if (label.contains('unload')) {
@@ -1340,7 +1360,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                             if (!isStarted)
                               ActionButtonCard(
                                 label: t.t('start_trip') ?? 'Start Trip',
-                                subtitle: "Swipe to begin your journey",
+                                subtitle: t.t('tap_to_start_trip') ?? "Swipe to begin your journey",
                                 icon: Icons.play_arrow,
                                 color: AppColors.success,
                                 isLoading: _isActionLoading,
@@ -1504,25 +1524,34 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                                               ...actions.map((act) {
                                                   // Determine Color & Subtitle
                                                   Color btnColor = AppColors.primary;
-                                                  String sub = "Tap to proceed";
+                                                  String sub = t.t('tap_to_proceed') ?? "Tap to proceed";
                                                   
                                                   final actionCode = act['action'] as String;
                                                   if (actionCode == 'reached') {
                                                      btnColor = Colors.blue.shade700;
-                                                     sub = "Confirm arrival at location";
+                                                     sub = t.t('tap_to_confirm_arrival') ?? "Confirm arrival at location";
                                                   } else if (actionCode.contains('start_action')) {
                                                       btnColor = Colors.orange.shade700;
                                                       final lowerLabel = (act['label'] as String? ?? '').toLowerCase();
-                                                      sub = lowerLabel.contains('unload') ? "Unloading" : "Loading";
+                                                      if (lowerLabel.contains('unload')) {
+                                                          sub = t.t('tap_if_unloading_started');
+                                                      } else {
+                                                          sub = t.t('tap_if_loading_started');
+                                                      }
                                                   } else if (actionCode.contains('complete_action')) {
                                                      btnColor = Colors.green.shade700;
-                                                     sub = "Finish task & Upload POD";
+                                                     final lowerLabel = (act['label'] as String? ?? '').toLowerCase();
+                                                     if (lowerLabel.contains('unload')) {
+                                                         sub = t.t('tap_if_unloading_completed');
+                                                     } else {
+                                                         sub = t.t('tap_if_loading_completed');
+                                                     }
                                                   } else if (actionCode == 'depart') {
                                                      btnColor = Colors.purple.shade700;
-                                                     sub = "Leave location for next stop";
+                                                     sub = t.t('tap_to_depart') ?? "Leave location for next stop";
                                                   } else if (actionCode == 'complete') {
                                                       btnColor = Colors.green; 
-                                                      sub = "Complete Trip";
+                                                      sub = t.t('tap_to_complete_trip') ?? "Complete Trip";
                                                   }
 
 
@@ -1537,7 +1566,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                                                       color: finalColor,
                                                       isLoading: _isActionLoading,
                                                       onPressed: _isActionLoading ? null : () {
-                                                         _updateStatus(act['action'], body: {'stopIndex': act['stopIndex'], 'force': isManual});
+                                                         _updateStatus(act['action'], body: {'stopIndex': act['stopIndex'], 'label': act['label'], 'force': isManual});
                                                          if(isManual) setState(() => _selectedStopIndex = null);
                                                       },
                                                   );
@@ -1553,8 +1582,10 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                                    // Strict Radius & Selection Logic
                                    // "Do nothing, if > allowed action radius" -> Hide everything
                                    // "No action until any place is clicked" -> Hide everything if no selection
+                                   // "Hide COMPLETED status bar" -> User Request
                                    
-                                   if (tooFar || _selectedStopIndex == null) {
+                                   final lowerStatus = stopStatus.toLowerCase();
+                                   if (tooFar || _selectedStopIndex == null || ['completed', 'departed', 'skipped'].contains(lowerStatus)) {
                                       return const SizedBox.shrink();
                                    }
                                    

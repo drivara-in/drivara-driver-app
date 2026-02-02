@@ -18,18 +18,17 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Strict environment loading (Default: .env)
+  const envFile = String.fromEnvironment('ENV_FILE', defaultValue: '.env');
+  
   try {
-    // Try to load local override first (for development)
-    await dotenv.load(fileName: ".env.local");
-    debugPrint("Loaded .env.local");
-  } catch (_) {
-    try {
-      // Fallback to default .env (for production/default)
-      await dotenv.load(fileName: ".env");
-      debugPrint("Loaded .env");
-    } catch (e) {
-      debugPrint("Failed to load .env: $e");
-    }
+    await dotenv.load(fileName: envFile);
+    debugPrint("Loaded $envFile");
+  } catch (e) {
+    debugPrint("Failed to load $envFile: $e");
+    // Optionally rethrow if you want the app to crash on missing config
+    // throw e; 
   }
   
   await initializeDateFormatting();

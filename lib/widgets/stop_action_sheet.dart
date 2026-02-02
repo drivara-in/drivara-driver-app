@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 import '../api_config.dart'; // For file upload
 import 'package:dio/dio.dart';
+import 'package:provider/provider.dart';
+import '../providers/localization_provider.dart';
 
 class StopActionSheet extends StatefulWidget {
   final String title;
@@ -121,7 +123,7 @@ class _StopActionSheetState extends State<StopActionSheet> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Time", style: AppTextStyles.label.copyWith(color: Theme.of(context).textTheme.bodyMedium?.color)),
+                      Text(Provider.of<LocalizationProvider>(context).t('time') ?? "Time", style: AppTextStyles.label.copyWith(color: Theme.of(context).textTheme.bodyMedium?.color)),
                       const SizedBox(height: 4),
                       Text(
                         DateFormat('hh:mm a').format(_selectedTime),
@@ -130,7 +132,7 @@ class _StopActionSheetState extends State<StopActionSheet> {
                     ],
                   ),
                   const Spacer(),
-                  const Text("Change", style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                  Text(Provider.of<LocalizationProvider>(context).t('label_change') ?? "Change", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
@@ -190,7 +192,7 @@ class _StopActionSheetState extends State<StopActionSheet> {
           TextField(
             controller: _notesCtrl,
             decoration: InputDecoration(
-              labelText: "Notes (Optional)",
+              labelText: Provider.of<LocalizationProvider>(context).t('note_optional') ?? "Notes (Optional)",
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               filled: true,
               fillColor: Theme.of(context).cardColor
@@ -212,7 +214,7 @@ class _StopActionSheetState extends State<StopActionSheet> {
               ),
               child: widget.isLoading 
                 ? const CircularProgressIndicator(color: Colors.white)
-                : Text("Confirm ${widget.title.split(' ').first}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                : Text(Provider.of<LocalizationProvider>(context).t('action_confirm') ?? "Confirm", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             ),
           )
         ],

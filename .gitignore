@@ -49,3 +49,4 @@ app.*.map.json
 # Android Signing
 *.jks
 key.properties
+*.apk

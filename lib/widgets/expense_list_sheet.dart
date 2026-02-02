@@ -147,9 +147,15 @@ class _ExpenseListSheetState extends State<ExpenseListSheet> {
        displayType = t.translateDynamic(type.toString().trim());
     }
     
-    final timestamp = expense['timestamp'] != null 
-        ? DateTime.parse(expense['timestamp']) 
-        : DateTime.now();
+    DateTime timestamp;
+    final rawTimestamp = expense['timestamp'];
+    if (rawTimestamp is int) {
+      timestamp = DateTime.fromMillisecondsSinceEpoch(rawTimestamp);
+    } else if (rawTimestamp is String) {
+      timestamp = DateTime.tryParse(rawTimestamp) ?? DateTime.now();
+    } else {
+      timestamp = DateTime.now();
+    }
     final description = expense['description'];
     final location = expense['location'];
 
