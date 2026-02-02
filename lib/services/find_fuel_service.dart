@@ -27,13 +27,10 @@ class FindFuelService {
        }
     ));
 
-    // Construct Routing Service URL from Main API URL
-    // Main: http://IP:8080/api -> Routing: http://IP:5055/api
-    final mainUrl = ApiConfig.baseUrl;
-    final routingUrl = mainUrl.replaceAll('8080', '5055');
-    _dio.options.baseUrl = routingUrl;
+    // Use Main API URL directly (Nginx handles routing)
+    _dio.options.baseUrl = ApiConfig.baseUrl;
     
-    print("FindFuelService: Initialized with Base URL: $routingUrl");
+    print("FindFuelService: Initialized with Base URL: ${_dio.options.baseUrl}");
   }
 
   // 50km search radius to find pumps even if they are far ahead
@@ -200,50 +197,25 @@ class FindFuelService {
   }
 
   Future<List<LatLng>> getDirections(LatLng origin, LatLng destination) async {
-    // Backend Endpoint: /api/routes/compute
-    const url = '/routes/compute';
-    
-    // Explicit syntax for Backend proxy to understand which provider/API to use if needed
-    // Assuming backend takes generic Routes API payload
-    
-    print("FindFuelService: Fetching directions via Backend...");
+    // Backend Endpoint: /api/driver/navigate
+    const url = '/driver/navigate';
 
     try {
       final response = await _dio.post(
         url,
         data: {
-          "origin": {
-            "location": {
-              "latLng": {
-                "latitude": origin.latitude,
-                "longitude": origin.longitude
-              }
-            }
-          },
-          "destination": {
-            "location": {
-              "latLng": {
-                "latitude": destination.latitude,
-                "longitude": destination.longitude
-              }
-            }
-          },
-          "travelMode": "DRIVE",
-          "routingPreference": "TRAFFIC_AWARE",
-          "routeModifiers": {
-            "avoidTolls": false,
-            "avoidHighways": false,
-            "avoidFerries": false
-          },
-          "units": "METRIC"
+          "vehicleId": "navigation_temp", // Required by schema
+          "stops": [
+             { "lat": origin.latitude, "lng": origin.longitude, "address": "Origin" },
+             { "lat": destination.latitude, "lng": destination.longitude, "address": "Destination" }
+          ]
         },
       );
 
       if (response.statusCode == 200) {
         final data = response.data;
-        if (data['routes'] != null && (data['routes'] as List).isNotEmpty) {
-           final encodedPolyline = data['routes'][0]['polyline']['encodedPolyline'];
-           return _decodePolyline(encodedPolyline);
+        if (data != null && data['polyline'] != null) {
+           return _decodePolyline(data['polyline']);
         }
       } else {
         print("FindFuelService: backend/http error: ${response.statusCode}");
