@@ -1330,59 +1330,8 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                                        
                                        // Custom Graphical Route Tracker
                                        // Calculate proportional stops
-                                       List<Map<String, dynamic>>? timelineStops;
-                                       final rawStops = (_job['route_stops'] as List?)?.cast<Map<String, dynamic>>();
-                                       
-                                       if (rawStops != null && rawStops.isNotEmpty) {
-                                           double totalDist = 0.0;
-                                           List<double> stopDists = [];
-                                           
-                                           // Origin
-                                           double lastLat = _parseNum(_job['origin_latitude'])?.toDouble() ?? 0.0;
-                                           double lastLng = _parseNum(_job['origin_longitude'])?.toDouble() ?? 0.0;
-                                           
-                                           // If origin missing, use first stop as 0? No, try best effort.
-                                           // If origin is 0,0, maybe used vehicle start location? 
-                                           // For now assume valid origin or 0 distances.
-                                           
-                                           for (var s in rawStops) {
-                                               double sLat = _parseNum(s['lat'])?.toDouble() ?? _parseNum(s['latitude'])?.toDouble() ?? 0.0;
-                                               double sLng = _parseNum(s['lng'])?.toDouble() ?? _parseNum(s['longitude'])?.toDouble() ?? 0.0;
-                                               
-                                               if (lastLat != 0 && lastLng != 0 && sLat != 0 && sLng != 0) {
-                                                   double d = _getHaversineDistance(lastLat, lastLng, sLat, sLng);
-                                                   totalDist += d;
-                                               }
-                                               stopDists.add(totalDist);
-                                               
-                                               // Update last
-                                               if (sLat != 0 && sLng != 0) {
-                                                   lastLat = sLat;
-                                                   lastLng = sLng;
-                                               }
-                                           }
-                                           
-                                           // Normalize
-                                           timelineStops = rawStops.asMap().entries.map((entry) {
-                                               int idx = entry.key;
-                                               Map<String, dynamic> s = Map.from(entry.value);
-                                               double d = stopDists[idx];
-                                               // If totalDist is small (e.g. single stop at origin), default to 1.0 or 0.0
-                                               // Ideally, last stop should be at 1.0
-                                               double pct = (totalDist > 0.5) ? (d / totalDist) : (idx / (rawStops.length > 1 ? rawStops.length - 1 : 1)); 
-                                               s['proportional_position'] = pct.clamp(0.0, 1.0);
-                                               return s;
-                                           }).toList();
-                                       }
+                                       _buildTimelineSection(context, progress),
 
-                                       RouteTimelineWidget(
-                                           progress: progress, 
-                                           activeColor: AppColors.primary,
-                                           inactiveColor: Theme.of(context).dividerColor,
-                                           stops: timelineStops,
-                                           onStopTap: _onStopTimelineTap,
-                                           selectedStopIndex: _selectedStopIndex,
-                                       ),
                                        
                                        const SizedBox(height: 10),
                                        Row(
@@ -1919,21 +1868,65 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
       );
   }
 
-  double _getHaversineDistance(double lat1, double lon1, double lat2, double lon2) {
-    const R = 6371.0; // km
-    final dLat = _toRadians(lat2 - lat1);
-    final dLon = _toRadians(lon2 - lon1);
-    final a = 
-      (math.sin(dLat / 2) * math.sin(dLat / 2)) +
-      math.cos(_toRadians(lat1)) * math.cos(_toRadians(lat2)) * 
-      (math.sin(dLon / 2) * math.sin(dLon / 2));
-    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
-    return R * c;
+  Widget _buildTimelineSection(BuildContext context, double progress) {
+    // Custom Graphical Route Tracker
+    // Calculate proportional stops
+    List<Map<String, dynamic>>? timelineStops;
+    final rawStops = (_job['route_stops'] as List?)?.cast<Map<String, dynamic>>();
+    
+    if (rawStops != null && rawStops.isNotEmpty) {
+        double totalDist = 0.0;
+        List<double> stopDists = [];
+        
+        // Origin
+        double lastLat = _parseNum(_job['origin_latitude'])?.toDouble() ?? 0.0;
+        double lastLng = _parseNum(_job['origin_longitude'])?.toDouble() ?? 0.0;
+        
+        // If origin missing, use first stop as 0? No, try best effort.
+        // If origin is 0,0, maybe used vehicle start location? 
+        // For now assume valid origin or 0 distances.
+        
+        for (var s in rawStops) {
+            double sLat = _parseNum(s['lat'])?.toDouble() ?? _parseNum(s['latitude'])?.toDouble() ?? 0.0;
+            double sLng = _parseNum(s['lng'])?.toDouble() ?? _parseNum(s['longitude'])?.toDouble() ?? 0.0;
+            
+            if (lastLat != 0 && lastLng != 0 && sLat != 0 && sLng != 0) {
+                double d = _getHaversineDistance(lastLat, lastLng, sLat, sLng);
+                totalDist += d;
+            }
+            stopDists.add(totalDist);
+            
+            // Update last
+            if (sLat != 0 && sLng != 0) {
+                lastLat = sLat;
+                lastLng = sLng;
+            }
+        }
+        
+        // Normalize
+        timelineStops = rawStops.asMap().entries.map((entry) {
+            int idx = entry.key;
+            Map<String, dynamic> s = Map.from(entry.value);
+            double d = stopDists[idx];
+            // If totalDist is small (e.g. single stop at origin), default to 1.0 or 0.0
+            // Ideally, last stop should be at 1.0
+            double pct = (totalDist > 0.5) ? (d / totalDist) : (idx / (rawStops.length > 1 ? rawStops.length - 1 : 1)); 
+            s['proportional_position'] = pct.clamp(0.0, 1.0);
+            return s;
+        }).toList();
+    }
+
+    return RouteTimelineWidget(
+        progress: progress, 
+        activeColor: AppColors.primary,
+        inactiveColor: Theme.of(context).dividerColor,
+        stops: timelineStops,
+        onStopTap: _onStopTimelineTap,
+        selectedStopIndex: _selectedStopIndex,
+    );
   }
 
-  double _toRadians(double degree) {
-    return degree * math.pi / 180;
-  }
+
   IconData _getActionIcon(String actionOrLabel) {
     final lower = actionOrLabel.toLowerCase();
     if (lower.contains('reach') || lower.contains('arrive')) return Icons.location_on;

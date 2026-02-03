@@ -108,6 +108,30 @@ class RouteTimelineWidget extends StatelessWidget {
         // Effective width for the connecting line
         final double lineWidth = totalWidth - markerSize; 
         
+        // Check collision (Vehicle vs Stops) - Hide vehicle if overlapping stop
+        // Vehicle pos logic: left: halfMarker + (lineWidth * progress) - 12
+        // Stop pos logic: left: leftPos (lineWidth * t)
+        // Threshold: markerSize (30) / 2 = 15 approx. Let's use 10px tolerance.
+        
+        bool isOverlapping = false;
+        final double vehicleActualLeft = (lineWidth * progress.clamp(0.0, 1.0)); // Relative to line start
+        
+        for (int i = 0; i < stopCount; i++) {
+            final stop = stops![i];
+            double t = 0.0;
+            if (stop.containsKey('proportional_position')) {
+                t = (stop['proportional_position'] as num).toDouble();
+            } else {
+                t = stopCount > 1 ? i / (stopCount - 1) : 0.0;
+            }
+            final double stopLeft = lineWidth * t;
+            
+            if ((vehicleActualLeft - stopLeft).abs() < 15.0) { // Increased threshold to 15px to cover the marker radius
+                isOverlapping = true;
+                break;
+            }
+        }
+        
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -144,22 +168,6 @@ class RouteTimelineWidget extends StatelessWidget {
                     ),
                   ),
                   
-                  // Vehicle Icon Head
-                  Positioned(
-                    top: 13, // (48 - 24 icon) / 2 = 12ish, adjustments for center. Line is at top 21 height 6. Center ~24. Icon 24 center.
-                    left: halfMarker + (lineWidth * progress.clamp(0.0, 1.0)) - 12, // -12 to center the 24px icon horizontally
-                    child: Container(
-                        decoration: BoxDecoration(
-                           color: Colors.white,
-                           shape: BoxShape.circle,
-                           boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)]
-                        ), 
-                        padding: const EdgeInsets.all(2),
-                        child: Icon(Icons.local_shipping, size: 16, color: activeColor)
-                    ),
-                  ),
-                  
-                  // Stop markers
                   // Stop markers
                   ...List.generate(stopCount, (index) {
                     final stop = stops![index];
@@ -205,44 +213,70 @@ class RouteTimelineWidget extends StatelessWidget {
                                 _getActivityIcon(activity),
                                 size: isSelected ? 20 : 16,
                                 color: Colors.white,
-                              ),
+                               ),
                             ),
                           ],
                         ),
                       ),
                     );
                   }),
+
+                  // Vehicle Icon Head (Moved to end for Z-Index)
+                  if (!isOverlapping)
+                    Positioned(
+                      top: 13, // (48 - 24 icon) / 2 = 12ish, adjustments for center. Line is at top 21 height 6. Center ~24. Icon 24 center.
+                      left: halfMarker + (lineWidth * progress.clamp(0.0, 1.0)) - 12, // -12 to center the 24px icon horizontally
+                      child: Container(
+                          decoration: BoxDecoration(
+                             color: Colors.white,
+                             shape: BoxShape.circle,
+                             boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)]
+                          ), 
+                          padding: const EdgeInsets.all(2),
+                          child: Icon(Icons.local_shipping, size: 16, color: activeColor)
+                      ),
+                    ),
                 ],
               ),
             ),
             const SizedBox(height: 8),
 
-            // Stop labels (A, B, C...)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: List.generate(stopCount, (index) {
-                final stop = stops![index];
-                // final label = stop['label'] as String? ?? _getStopLabel(index);
-                final activity = stop['activity'] as String?;
-                final isSelected = selectedStopIndex == index;
-                
-                return Expanded(
-                  child: InkWell(
-                    onTap: () {
-                       if (onStopTap != null) onStopTap!(index);
-                    },
-                    child: Text(
-                      _getStopLabel(index),
-                      textAlign: index == 0 ? TextAlign.start : (index == stopCount - 1 ? TextAlign.end : TextAlign.center),
-                      style: TextStyle(
-                        color: _getActivityColor(activity),
-                        fontSize: isSelected ? 12 : 10,
-                        fontWeight: isSelected ? FontWeight.w900 : FontWeight.bold,
+            // Stop labels (A, B, C...) - Using Stack for precise alignment
+            SizedBox(
+               height: 20,
+               width: totalWidth,
+               child: Stack(
+                 children: List.generate(stopCount, (index) {
+                   final stop = stops![index];
+                   final activity = stop['activity'] as String?;
+                   final isSelected = selectedStopIndex == index;
+                   
+                   double t = stop.containsKey('proportional_position') 
+                      ? (stop['proportional_position'] as num).toDouble() 
+                      : (stopCount > 1 ? index / (stopCount - 1) : 0.0);
+                      
+                   final double leftPos = lineWidth * t; // Same calculation as markers
+                   
+                   return Positioned(
+                      left: leftPos,
+                      width: markerSize, // Center within the marker width
+                      child: InkWell(
+                         onTap: () {
+                            if (onStopTap != null) onStopTap!(index);
+                         },
+                         child: Text(
+                           _getStopLabel(index),
+                           textAlign: TextAlign.center,
+                           style: TextStyle(
+                             color: _getActivityColor(activity),
+                             fontSize: isSelected ? 12 : 10,
+                             fontWeight: isSelected ? FontWeight.w900 : FontWeight.bold,
+                           ),
+                         ),
                       ),
-                    ),
-                  ),
-                );
-              }),
+                   );
+                 }),
+               ),
             ),
             
             // Address Display (New)

@@ -160,10 +160,6 @@ class LocalizationProvider extends ChangeNotifier {
       'upload_proof_label': 'Upload POD / Receipt',
       'gate_entry_proof_label': 'Gate Entry / Proof',
       'proof_optional_label': 'Proof (Optional)',
-      // OTP Errors
-      'verification_failed': 'सत्यापन विफल',
-      'network_error': 'नेटवर्क त्रुटि',
-      'fetch_job_error': 'जॉब स्टेटस लाने में विफल: ',
       'reached_loading_point': 'Reached Loading Point',
       'reached_unloading_point': 'Reached Unloading Point',
       'action_complete_job': 'Complete Trip',
@@ -227,8 +223,11 @@ class LocalizationProvider extends ChangeNotifier {
       'all_time': 'All Time',
       'no_drivers_found': 'No drivers found',
       'you': 'You',
+      'date_adjusted_msg': 'Future time detected. Date adjusted to previous day.',
     },
     'hi': {
+
+
       'login_title': 'Drivara Driver',
       'login_subtitle': 'लॉगिन करने के लिए अपना नंबर दर्ज करें',
       'phone_hint': 'मोबाइल नंबर',
@@ -343,7 +342,6 @@ class LocalizationProvider extends ChangeNotifier {
       'gate_entry_proof_label': 'गेट एंट्री / सबूत',
       'proof_optional_label': 'सबूत (वैकल्पिक)',
       'action_loaded': 'लोडिंग समाप्त',
-      'action_loaded': 'लोडिंग समाप्त',
       'action_unloaded': 'अनलोडिंग समाप्त',
       'action_complete_job': 'यात्रा पूर्ण करें',
       'loading_started': 'कार्य शुरू किया',
@@ -413,8 +411,11 @@ class LocalizationProvider extends ChangeNotifier {
       'all_time': 'सभी समय',
       'no_drivers_found': 'कोई ड्राइवर नहीं मिला',
       'you': 'आप',
+      'date_adjusted_msg': 'भविष्य का समय। तारीख पिछले दिन कर दी गई है।',
     },
     'te': { // Telugu
+
+
       'login_title': 'Drivara Driver',
       'login_subtitle': 'Enter your number to login',
       'phone_hint': 'మొబైల్ నంబర్',
@@ -597,8 +598,11 @@ class LocalizationProvider extends ChangeNotifier {
       'all_time': 'అన్ని సమయాలు',
       'no_drivers_found': 'డ్రైవర్లు కనుగొనబడలేదు',
       'you': 'మీరు',
+      'date_adjusted_msg': 'భవిష్యత్తు సమయం. తేదీ మునుపటి రోజుకు మార్చబడింది.',
     },
     'ml': { // Malayalam
+
+
       'login_title': 'Drivara Driver',
       'login_subtitle': 'Enter your number to login',
       'phone_hint': 'മൊബൈൽ നമ്പർ',
@@ -778,8 +782,11 @@ class LocalizationProvider extends ChangeNotifier {
       'all_time': 'എല്ലാ കാലവും',
       'no_drivers_found': 'ഡ്രൈവർമാരെ കണ്ടെത്തിയില്ല',
       'you': 'നിങ്ങൾ',
+      'date_adjusted_msg': 'ഭാവി സമയം. തീയതി മുൻ ദിവസത്തേക്ക് മാറ്റി.',
     },
     'kn': { // Kannada
+
+
       'login_title': 'Drivara Driver',
       'login_subtitle': 'Enter your number to login',
       'phone_hint': 'ಮೊಬೈಲ್ ಸಂಖ್ಯೆ',
@@ -962,8 +969,11 @@ class LocalizationProvider extends ChangeNotifier {
       'all_time': 'ಎಲ್ಲಾ ಸಮಯ',
       'no_drivers_found': 'ಯಾವುದೇ ಚಾಲಕರು ಕಂಡುಬಂದಿಲ್ಲ',
       'you': 'ನೀವು',
+      'date_adjusted_msg': 'ಭವಿಷ್ಯದ ಸಮಯ. ದಿನಾಂಕವನ್ನು ಹಿಂದಿನ ದಿನಕ್ಕೆ ಬದಲಾಯಿಸಲಾಗಿದೆ.',
     },
     'ta': { // Tamil
+
+
       'login_title': 'Drivara Driver',
       'login_subtitle': 'Enter your number to login',
       'phone_hint': 'மொபைல் எண்',
@@ -1148,8 +1158,11 @@ class LocalizationProvider extends ChangeNotifier {
       'all_time': 'எல்லா காலமும்',
       'no_drivers_found': 'ஓட்டுநர்கள் யாரும் இல்லை',
       'you': 'நீங்கள்',
+      'date_adjusted_msg': 'எதிர்கால நேரம். தேதி முந்தைய நாளுக்கு மாற்றப்பட்டது.',
     },
   };
+
+
 
   // Dynamic translation cache
   final Map<String, String> _dynamicCache = {};

@@ -159,10 +159,12 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
         return;
      }
 
-     if (_amountController.text.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.t('enter_amount_error'))));
-        return;
-     }
+      if (_amountController.text.isEmpty) {
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.t('enter_amount_error'))));
+         return;
+      }
+      
+
 
      setState(() => _isLoading = true);
      try {
@@ -340,13 +342,22 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                                }
                             );
                             if (time != null) {
-                               setState(() {
-                                 _selectedDateTime = DateTime(
+                               var newDateTime = DateTime(
                                    _selectedDateTime.year,
                                    _selectedDateTime.month,
                                    _selectedDateTime.day,
                                    time.hour, time.minute
-                                 );
+                               );
+                               
+                               if (newDateTime.isAfter(DateTime.now())) {
+                                  newDateTime = newDateTime.subtract(const Duration(days: 1));
+                                  if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.t('date_adjusted_msg'))));
+                                  }
+                               }
+
+                               setState(() {
+                                 _selectedDateTime = newDateTime;
                                });
                                _fetchLocationForTime();
                             }
