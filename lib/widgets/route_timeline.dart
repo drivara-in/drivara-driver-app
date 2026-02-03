@@ -166,8 +166,14 @@ class RouteTimelineWidget extends StatelessWidget {
                     final activity = stop['activity'] as String?;
                     final isSelected = selectedStopIndex == index;
                     
-                    // 0.0 to 1.0 along the line
-                    final t = stopCount > 1 ? index / (stopCount - 1) : 0.0;
+                    // 0.0 to 1.0 along the line (Priority: Proportional Position)
+                    double t = 0.0;
+                    if (stop.containsKey('proportional_position')) {
+                        t = (stop['proportional_position'] as num).toDouble();
+                    } else {
+                        // Fallback to equal spacing
+                        t = stopCount > 1 ? index / (stopCount - 1) : 0.0;
+                    }
                     
                     final double leftPos = lineWidth * t;
                     
