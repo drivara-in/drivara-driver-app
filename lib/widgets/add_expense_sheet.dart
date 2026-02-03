@@ -190,6 +190,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
            'type': _selectedType,
            'amount': double.tryParse(_amountController.text) ?? 0,
            'timestamp': _selectedDateTime.toIso8601String(),
+           'timezone': DateTime.now().timeZoneName,
            'description': _descController.text,
            'location': _locationController.text.isNotEmpty ? _locationController.text : "Manual Entry", 
            'file_upload_id': fileId,

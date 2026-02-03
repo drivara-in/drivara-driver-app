@@ -150,9 +150,9 @@ class _ExpenseListSheetState extends State<ExpenseListSheet> {
     DateTime timestamp;
     final rawTimestamp = expense['timestamp'];
     if (rawTimestamp is int) {
-      timestamp = DateTime.fromMillisecondsSinceEpoch(rawTimestamp);
+      timestamp = DateTime.fromMillisecondsSinceEpoch(rawTimestamp).toLocal();
     } else if (rawTimestamp is String) {
-      timestamp = DateTime.tryParse(rawTimestamp) ?? DateTime.now();
+      timestamp = DateTime.tryParse(rawTimestamp)?.toLocal() ?? DateTime.now();
     } else {
       timestamp = DateTime.now();
     }
