@@ -1451,11 +1451,17 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                                            
                                            if (status == 'pending') {
                                                 if (!tooFar) {
-                                                    String label = 'Arrived';
-                                                    if (type == 'loading') label = t.t('reached_loading_point') ?? 'Reached Loading Point';
-                                                    else if (type == 'unloading') label = t.t('reached_unloading_point') ?? 'Reached Unloading Point';
-                                                    
-                                                    actions.add({'action': 'reached', 'label': label, 'stopIndex': _selectedStopIndex});
+                                                    // SKIP ARRIVED LOGIC: First stop + generic type
+                                                    if (_selectedStopIndex == 0 && type == 'stop') {
+                                                        // Direct to 'depart'
+                                                         actions.add({'action': 'depart', 'label': t.t('action_departed') ?? 'Departed', 'stopIndex': _selectedStopIndex});
+                                                    } else {
+                                                        String label = 'Arrived';
+                                                        if (type == 'loading') label = t.t('reached_loading_point') ?? 'Reached Loading Point';
+                                                        else if (type == 'unloading') label = t.t('reached_unloading_point') ?? 'Reached Unloading Point';
+                                                        
+                                                        actions.add({'action': 'reached', 'label': label, 'stopIndex': _selectedStopIndex});
+                                                    }
                                                 }
                                            } else if (status == 'reached') {
                                                 if (type == 'loading' && stop['action_completed_at'] == null) {
