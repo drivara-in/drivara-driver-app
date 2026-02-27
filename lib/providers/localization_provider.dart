@@ -109,6 +109,8 @@ class LocalizationProvider extends ChangeNotifier {
       'etype_Other': 'Other',
       'etype_Parking': 'Parking',
       'etype_Fuel Expense': 'Fuel Expense',
+      'etype_DEF': 'DEF',
+      'etype_DEF Expense': 'DEF Expense',
       'etype_FASTag Expense': 'FASTag Expense',
       // Active Job Page
       'vehicle_location_unknown': 'Vehicle location unknown',
@@ -226,6 +228,15 @@ class LocalizationProvider extends ChangeNotifier {
       'no_drivers_found': 'No drivers found',
       'you': 'You',
       'date_adjusted_msg': 'Future time detected. Date adjusted to previous day.',
+      // Stop Completion Sheet
+      'finish_loading': 'Finish Loading',
+      'finish_unloading': 'Finish Unloading',
+      'complete_stop': 'Complete Stop',
+      'upload_pod': 'Upload Proof of Delivery',
+      'pod_required_error': 'Proof of Delivery photo is required',
+      'submit_complete': 'Complete & Submit',
+      'notes': 'Notes / Remarks',
+      'view_bill': 'View Bill',
     },
     'hi': {
 
@@ -303,6 +314,8 @@ class LocalizationProvider extends ChangeNotifier {
       'etype_Other': 'अन्य',
       'etype_Parking': 'पार्किंग',
       'etype_Fuel Expense': 'ईंधन खर्च',
+      'etype_DEF': 'DEF',
+      'etype_DEF Expense': 'DEF खर्च',
       'etype_FASTag Expense': 'फास्टैग खर्च',
       // Active Job Page
       'vehicle_location_unknown': 'वाहन का स्थान अज्ञात',
@@ -416,6 +429,15 @@ class LocalizationProvider extends ChangeNotifier {
       'no_drivers_found': 'कोई ड्राइवर नहीं मिला',
       'you': 'आप',
       'date_adjusted_msg': 'भविष्य का समय। तारीख पिछले दिन कर दी गई है।',
+      // Stop Completion Sheet
+      'finish_loading': 'लोडिंग पूरी करें',
+      'finish_unloading': 'अनलोडिंग पूरी करें',
+      'complete_stop': 'स्टॉप पूरा करें',
+      'upload_pod': 'डिलीवरी का प्रमाण अपलोड करें',
+      'pod_required_error': 'डिलीवरी के प्रमाण की फोटो आवश्यक है',
+      'submit_complete': 'पूरा करें और जमा करें',
+      'notes': 'नोट्स / टिप्पणी',
+      'view_bill': 'बिल देखें',
     },
     'te': { // Telugu
 
@@ -493,6 +515,8 @@ class LocalizationProvider extends ChangeNotifier {
       'etype_Other': 'ఇతర',
       'etype_Parking': 'పార్కింగ్',
       'etype_Fuel Expense': 'ఇంధన ఖర్చు',
+      'etype_DEF': 'DEF',
+      'etype_DEF Expense': 'DEF ఖర్చు',
       'etype_FASTag Expense': 'ఫాస్ట్యాగ్ ఖర్చు',
       // Active Job Page
       'vehicle_location_unknown': 'వాహన స్థానం తెలియదు',
@@ -605,6 +629,18 @@ class LocalizationProvider extends ChangeNotifier {
       'no_drivers_found': 'డ్రైవర్లు కనుగొనబడలేదు',
       'you': 'మీరు',
       'date_adjusted_msg': 'భవిష్యత్తు సమయం. తేదీ మునుపటి రోజుకు మార్చబడింది.',
+      // Stop Completion Sheet
+      'finish_loading': 'లోడింగ్ పూర్తి చేయండి',
+      'finish_unloading': 'అన్‌లోడింగ్ పూర్తి చేయండి',
+      'complete_stop': 'స్టాప్ పూర్తి చేయండి',
+      'upload_pod': 'డెలివరీ రుజువు అప్‌లోడ్ చేయండి',
+      'pod_required_error': 'డెలివరీ రుజువు ఫోటో అవసరం',
+      'submit_complete': 'పూర్తి చేసి సమర్పించండి',
+      'notes': 'గమనికలు / వ్యాఖ్యలు',
+      'view_bill': 'బిల్ చూడండి',
+      'job_started': 'ట్రిప్ ప్రారంభమైంది',
+      'reached_loading_point': 'లోడింగ్ పాయింట్ చేరుకున్నారు',
+      'reached_unloading_point': 'అన్‌లోడింగ్ పాయింట్ చేరుకున్నారు',
     },
     'ml': { // Malayalam
 
@@ -682,6 +718,8 @@ class LocalizationProvider extends ChangeNotifier {
       'etype_Other': 'മറ്റുള്ളവ',
       'etype_Parking': 'പാർക്കിംഗ്',
       'etype_Fuel Expense': 'ഇന്ധന ചെലവ്',
+      'etype_DEF': 'DEF',
+      'etype_DEF Expense': 'DEF ചെലവ്',
       'etype_FASTag Expense': 'ഫാസ്റ്റാഗ് ചെലവ്',
       // Active Job Page
       'vehicle_location_unknown': 'വാഹന ലൊക്കേഷൻ ലഭ്യമല്ല',
@@ -791,6 +829,22 @@ class LocalizationProvider extends ChangeNotifier {
       'no_drivers_found': 'ഡ്രൈവർമാരെ കണ്ടെത്തിയില്ല',
       'you': 'നിങ്ങൾ',
       'date_adjusted_msg': 'ഭാവി സമയം. തീയതി മുൻ ദിവസത്തേക്ക് മാറ്റി.',
+      // Stop Completion Sheet
+      'finish_loading': 'ലോഡിംഗ് പൂർത്തിയാക്കുക',
+      'finish_unloading': 'അൺലോഡിംഗ് പൂർത്തിയാക്കുക',
+      'complete_stop': 'സ്റ്റോപ്പ് പൂർത്തിയാക്കുക',
+      'upload_pod': 'ഡെലിവറി തെളിവ് അപ്‌ലോഡ് ചെയ്യുക',
+      'pod_required_error': 'ഡെലിവറി തെളിവിന്റെ ഫോട്ടോ ആവശ്യമാണ്',
+      'submit_complete': 'പൂർത്തിയാക്കി സമർപ്പിക്കുക',
+      'notes': 'കുറിപ്പുകൾ / അഭിപ്രായങ്ങൾ',
+      'view_bill': 'ബിൽ കാണുക',
+      'driver_role': 'ഡ്രൈവർ',
+      'job_label': 'ട്രിപ്പ്',
+      'label_start': 'ആരംഭിക്കുക',
+      'label_end': 'അവസാനിക്കുക',
+      'job_started': 'ട്രിപ്പ് ആരംഭിച്ചു',
+      'reached_loading_point': 'ലോഡിംഗ് പോയിന്റിൽ എത്തി',
+      'reached_unloading_point': 'അൺലോഡിംഗ് പോയിന്റിൽ എത്തി',
     },
     'kn': { // Kannada
 
@@ -868,6 +922,8 @@ class LocalizationProvider extends ChangeNotifier {
       'etype_Other': 'ಇತರೆ',
       'etype_Parking': 'ಪಾರ್ಕಿಂಗ್',
       'etype_Fuel Expense': 'ಇಂಧನ ವೆಚ್ಚ',
+      'etype_DEF': 'DEF',
+      'etype_DEF Expense': 'DEF ವೆಚ್ಚ',
       'etype_FASTag Expense': 'ಫಾಸ್ಟ್ಯಾಗ್ ವೆಚ್ಚ',
       // Active Job Page
       'vehicle_location_unknown': 'ವಾಹನದ ಸ್ಥಳ ತಿಳಿದಿಲ್ಲ',
@@ -980,6 +1036,18 @@ class LocalizationProvider extends ChangeNotifier {
       'no_drivers_found': 'ಯಾವುದೇ ಚಾಲಕರು ಕಂಡುಬಂದಿಲ್ಲ',
       'you': 'ನೀವು',
       'date_adjusted_msg': 'ಭವಿಷ್ಯದ ಸಮಯ. ದಿನಾಂಕವನ್ನು ಹಿಂದಿನ ದಿನಕ್ಕೆ ಬದಲಾಯಿಸಲಾಗಿದೆ.',
+      // Stop Completion Sheet
+      'finish_loading': 'ಲೋಡಿಂಗ್ ಪೂರ್ಣಗೊಳಿಸಿ',
+      'finish_unloading': 'ಅನ್‌ಲೋಡಿಂಗ್ ಪೂರ್ಣಗೊಳಿಸಿ',
+      'complete_stop': 'ಸ್ಟಾಪ್ ಪೂರ್ಣಗೊಳಿಸಿ',
+      'upload_pod': 'ಡೆಲಿವರಿ ಪುರಾವೆ ಅಪ್‌ಲೋಡ್ ಮಾಡಿ',
+      'pod_required_error': 'ಡೆಲಿವರಿ ಪುರಾವೆ ಫೋಟೋ ಅಗತ್ಯವಿದೆ',
+      'submit_complete': 'ಪೂರ್ಣಗೊಳಿಸಿ ಮತ್ತು ಸಲ್ಲಿಸಿ',
+      'notes': 'ಟಿಪ್ಪಣಿಗಳು / ಹೇಳಿಕೆಗಳು',
+      'view_bill': 'ಬಿಲ್ ವೀಕ್ಷಿಸಿ',
+      'job_started': 'ಟ್ರಿಪ್ ಪ್ರಾರಂಭವಾಯಿತು',
+      'reached_loading_point': 'ಲೋಡಿಂಗ್ ಪಾಯಿಂಟ್ ತಲುಪಿದ್ದೀರಿ',
+      'reached_unloading_point': 'ಅನ್‌ಲೋಡಿಂಗ್ ಪಾಯಿಂಟ್ ತಲುಪಿದ್ದೀರಿ',
     },
     'ta': { // Tamil
 
@@ -1061,6 +1129,8 @@ class LocalizationProvider extends ChangeNotifier {
       'etype_Other': 'மற்றவை',
       'etype_Parking': 'பார்க்கிங்',
       'etype_Fuel Expense': 'எரிபொருள் செலவு',
+      'etype_DEF': 'DEF',
+      'etype_DEF Expense': 'DEF செலவு',
       'etype_FASTag Expense': 'பாஸ்டேக் செலவு',
       // Active Job Page
       'vehicle_location_unknown': 'வாகன இருப்பிடம் தெரியவில்லை',
@@ -1171,6 +1241,16 @@ class LocalizationProvider extends ChangeNotifier {
       'no_drivers_found': 'ஓட்டுநர்கள் யாரும் இல்லை',
       'you': 'நீங்கள்',
       'date_adjusted_msg': 'எதிர்கால நேரம். தேதி முந்தைய நாளுக்கு மாற்றப்பட்டது.',
+      // Stop Completion Sheet
+      'finish_loading': 'ஏற்றுவதை முடிக்கவும்',
+      'finish_unloading': 'இறக்குவதை முடிக்கவும்',
+      'complete_stop': 'நிறுத்தத்தை நிறைவு செய்யவும்',
+      'upload_pod': 'டெலிவரி ஆதாரம் பதிவேற்றவும்',
+      'pod_required_error': 'டெலிவரி ஆதார புகைப்படம் அவசியம்',
+      'submit_complete': 'நிறைவு செய்து சமர்ப்பிக்கவும்',
+      'notes': 'குறிப்புகள் / கருத்துகள்',
+      'view_bill': 'பில் பார்க்க',
+      'job_started': 'பயணம் தொடங்கியது',
     },
   };
 
@@ -1204,6 +1284,15 @@ class LocalizationProvider extends ChangeNotifier {
         'ta': 'ஏற்று கூலி', // Yetru kooli
         'kn': 'ಲೋಡಿಂಗ್ ವೆಚ್ಚ',
         'ml': 'കയറ്റുകൂലി' // Kayattu kooli
+     },
+     // DEF
+     'def': {'hi': 'DEF', 'te': 'DEF', 'ta': 'DEF', 'kn': 'DEF', 'ml': 'DEF'},
+     'def expense': {
+        'hi': 'DEF खर्च',
+        'te': 'DEF ఖర్చు',
+        'ta': 'DEF செலவு',
+        'kn': 'DEF ವೆಚ್ಚ',
+        'ml': 'DEF ചെലവ്'
      },
      // Official/Bribe (Common in logistics)
      'rto': {'hi': 'आरटीओ', 'ta': 'RTO', 'te': 'RTO', 'kn': 'RTO', 'ml': 'RTO'},
