@@ -28,6 +28,7 @@ class _StopCompletionSheetState extends State<StopCompletionSheet> {
   File? _imageFile;
   final ImagePicker _picker = ImagePicker();
   bool _isUploading = false;
+  String? _errorText;
   
   // Decide if POD is mandatory based on stop type
   // Usually Unloading or Dropoff requires POD.
@@ -52,11 +53,11 @@ class _StopCompletionSheetState extends State<StopCompletionSheet> {
   Future<void> _submit() async {
       final t = Provider.of<LocalizationProvider>(context, listen: false);
       if (_isPodMandatory && _imageFile == null) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.t('pod_required_error') ?? "Proof of Delivery photo is required")));
+          setState(() => _errorText = t.t('pod_required_error') ?? "Proof of Delivery photo is required");
           return;
       }
 
-      setState(() => _isUploading = true);
+      setState(() { _errorText = null; _isUploading = true; });
 
       String? fileId;
       try {
@@ -69,7 +70,7 @@ class _StopCompletionSheetState extends State<StopCompletionSheet> {
 
       } catch (e) {
           debugPrint("Upload failed: $e");
-          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Upload failed: $e")));
+          if (mounted) setState(() => _errorText = "Upload failed: $e");
       } finally {
           if (mounted) setState(() => _isUploading = false);
       }
@@ -166,7 +167,13 @@ class _StopCompletionSheetState extends State<StopCompletionSheet> {
                 ),
             ),
             
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+
+            if (_errorText != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(_errorText!, style: const TextStyle(color: Colors.red, fontSize: 14, fontWeight: FontWeight.w500)),
+              ),
 
             SizedBox(
                 width: double.infinity,

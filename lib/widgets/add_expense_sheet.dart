@@ -25,6 +25,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
   bool _isLoading = false;
   bool _isTypesLoading = true;
   List<dynamic> _expenseTypes = [];
+  String? _errorText;
   
   // Form State
   String? _selectedType;
@@ -147,30 +148,32 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
   Future<void> _submit() async {
      final t = Provider.of<LocalizationProvider>(context, listen: false);
      if (_selectedType == null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.t('select_type_error'))));
+        setState(() => _errorText = t.t('select_type_error'));
         return;
      }
 
      // Check mandatory bill
      final selectedTypeObj = _expenseTypes.firstWhere((e) => e['name'] == _selectedType, orElse: () => null);
      final bool isMandatory = selectedTypeObj != null && (selectedTypeObj['is_bill_mandatory'] == true || selectedTypeObj['mandate'] == true);
-     
+
      if (isMandatory && _selectedBillImage == null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.t('bill_required_error'))));
+        setState(() => _errorText = t.t('bill_required_error'));
         return;
      }
 
       if (_amountController.text.isEmpty) {
-         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.t('enter_amount_error'))));
+         setState(() => _errorText = t.t('enter_amount_error'));
          return;
       }
 
       // Quantity is mandatory for Fuel/DEF expenses
       final isFuelOrDef = _selectedType != null && (_selectedType!.toLowerCase().contains('fuel') || _selectedType!.toLowerCase().contains('def'));
       if (isFuelOrDef && _qtyController.text.isEmpty) {
-         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.t('enter_quantity_error') ?? 'Please enter quantity in litres')));
+         setState(() => _errorText = t.t('enter_quantity_error') ?? 'Please enter quantity in litres');
          return;
       }
+
+      setState(() => _errorText = null);
 
      setState(() => _isLoading = true);
      try {
@@ -500,8 +503,17 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                   ),
               ],
 
-              const SizedBox(height: 24),
-              
+              const SizedBox(height: 16),
+
+              if (_errorText != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    _errorText!,
+                    style: const TextStyle(color: Colors.red, fontSize: 14, fontWeight: FontWeight.w500),
+                  ),
+                ),
+
               SizedBox(
                  width: double.infinity,
                  height: 50,

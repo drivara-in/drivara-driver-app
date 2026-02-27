@@ -159,6 +159,11 @@ class _ExpenseListSheetState extends State<ExpenseListSheet> {
     final description = expense['description'];
     final location = expense['location'];
 
+    // Quantity & rate per litre for fuel/DEF
+    final rawQty = expense['qty'];
+    final double? qty = rawQty is num ? rawQty.toDouble() : double.tryParse(rawQty?.toString() ?? '');
+    final double? ratePerL = (qty != null && qty > 0) ? amount / qty : null;
+
     final createdBy = expense['created_by_name'] ?? 'Driver';
     final createdById = expense['created_by'];
     final driverId = expense['driver_id'];
@@ -244,6 +249,27 @@ class _ExpenseListSheetState extends State<ExpenseListSheet> {
             ],
           ),
           
+          if (qty != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.local_gas_station, size: 16, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6)),
+                const SizedBox(width: 8),
+                Text(
+                  '${qty.toStringAsFixed(1)} L',
+                  style: AppTextStyles.body.copyWith(fontSize: 13, color: Theme.of(context).textTheme.bodyMedium?.color),
+                ),
+                if (ratePerL != null) ...[
+                  const SizedBox(width: 12),
+                  Text(
+                    '@ ₹${ratePerL.toStringAsFixed(2)}/L',
+                    style: AppTextStyles.label.copyWith(fontSize: 12, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6)),
+                  ),
+                ],
+              ],
+            ),
+          ],
+
           if (description != null && description.toString().isNotEmpty) ...[
             const SizedBox(height: 12),
             Row(

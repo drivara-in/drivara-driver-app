@@ -34,6 +34,7 @@ class _StopActionSheetState extends State<StopActionSheet> {
   String? _uploadedFileId;
   String? _fileName;
   bool _isUploading = false;
+  String? _errorText;
   final TextEditingController _notesCtrl = TextEditingController();
 
   Future<void> _pickTime() async {
@@ -79,7 +80,7 @@ class _StopActionSheetState extends State<StopActionSheet> {
        }
     } catch (e) {
       debugPrint("Upload Failed: $e");
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Upload Failed")));
+      if (mounted) setState(() => _errorText = "Upload Failed");
     } finally {
       setState(() => _isUploading = false);
     }
@@ -200,7 +201,12 @@ class _StopActionSheetState extends State<StopActionSheet> {
             maxLines: 2,
           ),
 
-          const SizedBox(height: 30),
+          const SizedBox(height: 20),
+          if (_errorText != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(_errorText!, style: const TextStyle(color: Colors.red, fontSize: 14, fontWeight: FontWeight.w500)),
+            ),
           SizedBox(
             width: double.infinity,
             height: 56,
