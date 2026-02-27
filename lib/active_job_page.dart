@@ -1451,9 +1451,9 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                                            
                                            if (status == 'pending') {
                                                 if (!tooFar) {
-                                                    // SKIP ARRIVED LOGIC: First stop + generic type
-                                                    if (_selectedStopIndex == 0 && type == 'stop') {
-                                                        // Direct to 'depart'
+                                                    // SKIP ARRIVED LOGIC: Backend computes skip_arrived based on vehicle-to-stop distance
+                                                    if (stop['skip_arrived'] == true) {
+                                                        // Vehicle was at the starting point — skip arrived, go directly to depart
                                                          actions.add({'action': 'depart', 'label': t.t('action_departed') ?? 'Departed', 'stopIndex': _selectedStopIndex});
                                                     } else {
                                                         String label = 'Arrived';

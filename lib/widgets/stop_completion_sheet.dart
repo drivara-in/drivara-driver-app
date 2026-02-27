@@ -38,7 +38,7 @@ class _StopCompletionSheetState extends State<StopCompletionSheet> {
 
   Future<void> _pickImage(ImageSource source) async {
     try {
-      final XFile? pickedFile = await _picker.pickImage(source: source, imageQuality: 70);
+      final XFile? pickedFile = await _picker.pickImage(source: source, maxWidth: 1280, maxHeight: 1280, imageQuality: 70);
       if (pickedFile != null) {
         setState(() {
           _imageFile = File(pickedFile.path);

@@ -29,8 +29,9 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
   // Form State
   String? _selectedType;
   final TextEditingController _amountController = TextEditingController();
+  final TextEditingController _qtyController = TextEditingController();
   final TextEditingController _descController = TextEditingController();
-  final TextEditingController _locationController = TextEditingController(); 
+  final TextEditingController _locationController = TextEditingController();
   DateTime _selectedDateTime = DateTime.now();
   
   // Location Coordinates State
@@ -126,7 +127,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
 
   Future<void> _pickImage(ImageSource source) async {
     try {
-      final XFile? pickedFile = await _picker.pickImage(source: source, imageQuality: 70);
+      final XFile? pickedFile = await _picker.pickImage(source: source, maxWidth: 1280, maxHeight: 1280, imageQuality: 70);
       if (pickedFile != null) {
         setState(() {
           _selectedBillImage = File(pickedFile.path);
@@ -163,8 +164,13 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.t('enter_amount_error'))));
          return;
       }
-      
 
+      // Quantity is mandatory for Fuel/DEF expenses
+      final isFuelOrDef = _selectedType != null && (_selectedType!.toLowerCase().contains('fuel') || _selectedType!.toLowerCase().contains('def'));
+      if (isFuelOrDef && _qtyController.text.isEmpty) {
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.t('enter_quantity_error') ?? 'Please enter quantity in litres')));
+         return;
+      }
 
      setState(() => _isLoading = true);
      try {
@@ -194,10 +200,11 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
            'timestamp': _selectedDateTime.toIso8601String(),
            'timezone': DateTime.now().timeZoneName,
            'description': _descController.text,
-           'location': _locationController.text.isNotEmpty ? _locationController.text : "Manual Entry", 
+           'location': _locationController.text.isNotEmpty ? _locationController.text : "Manual Entry",
            'file_upload_id': fileId,
            'latitude': _lat,
            'longitude': _lng,
+           if (_qtyController.text.isNotEmpty) 'qty': double.tryParse(_qtyController.text),
         };
 
         debugPrint("Posting expense payload: $payload");
@@ -268,7 +275,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                          child: Text(localizedName),
                       );
                   }).toList(),
-                    onChanged: (val) => setState(() => _selectedType = val),
+                    onChanged: (val) { setState(() { _selectedType = val; _qtyController.clear(); }); },
                  ),
                  const SizedBox(height: 16),
 
@@ -284,6 +291,23 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                     ),
                  ),
                  const SizedBox(height: 16),
+
+                 // Quantity (Litres) — shown only for Fuel/DEF expense types
+                 if (_selectedType != null && (_selectedType!.toLowerCase().contains('fuel') || _selectedType!.toLowerCase().contains('def')))
+                   ...[
+                     TextField(
+                       controller: _qtyController,
+                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                       decoration: InputDecoration(
+                         labelText: t.t('quantity_litres') ?? 'Quantity (Litres)',
+                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                         filled: true,
+                         fillColor: Theme.of(context).scaffoldBackgroundColor,
+                         suffixText: 'L',
+                       ),
+                     ),
+                     const SizedBox(height: 16),
+                   ],
 
                      Row(
                    children: [
