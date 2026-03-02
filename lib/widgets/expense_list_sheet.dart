@@ -20,12 +20,29 @@ class _ExpenseListSheetState extends State<ExpenseListSheet> {
   bool _isLoading = true;
   List<dynamic> _expenses = [];
   String? _currentDriverId;
+  Map<String, Map<String, dynamic>> _typeTranslations = {};
 
   @override
   void initState() {
     super.initState();
     _fetchDriverId();
     _fetchExpenses();
+    _fetchExpenseTypes();
+  }
+
+  Future<void> _fetchExpenseTypes() async {
+    try {
+      final response = await ApiConfig.dio.get('/driver/expenses/types');
+      if (mounted && response.data is List) {
+        final map = <String, Map<String, dynamic>>{};
+        for (final t in response.data) {
+          if (t is Map && t['name'] != null) {
+            map[t['name'].toString().trim()] = Map<String, dynamic>.from(t);
+          }
+        }
+        setState(() => _typeTranslations = map);
+      }
+    } catch (_) {}
   }
 
   Future<void> _fetchDriverId() async {
@@ -144,7 +161,15 @@ class _ExpenseListSheetState extends State<ExpenseListSheet> {
     if (type == 'Unknown') {
        displayType = t.t('unknown');
     } else {
-       displayType = t.translateDynamic(type.toString().trim());
+       final trimmedType = type.toString().trim();
+       final typeData = _typeTranslations[trimmedType];
+       final translations = typeData?['translations'];
+       final langCode = t.locale.languageCode;
+       if (translations is Map && translations[langCode] != null) {
+         displayType = translations[langCode].toString();
+       } else {
+         displayType = t.translateDynamic(trimmedType);
+       }
     }
     
     DateTime timestamp;

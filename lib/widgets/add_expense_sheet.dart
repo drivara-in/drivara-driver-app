@@ -271,10 +271,14 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                     ),
                     items: _expenseTypes.map((type) {
                       final englishName = type['name'].toString().trim();
-                      final localizedName = t.translateDynamic(englishName);
-                      
+                      final translations = type['translations'];
+                      final langCode = t.locale.languageCode;
+                      final localizedName = (translations is Map && translations[langCode] != null)
+                          ? translations[langCode].toString()
+                          : t.translateDynamic(englishName);
+
                       return DropdownMenuItem<String>(
-                         value: englishName, 
+                         value: englishName,
                          child: Text(localizedName),
                       );
                   }).toList(),
