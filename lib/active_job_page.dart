@@ -1482,10 +1482,10 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                                                         }
                                                     }
                                                 }
-                                            } else if (status == 'action_in_progress') {
-                                                // Restriction applies to Complete (EPOD)
+                                            } else if (status == 'action_in_progress' || status == 'loading' || status == 'unloading') {
+                                                // Handle 'action_in_progress' and literal 'loading'/'unloading' statuses
                                                 if (!tooFar) {
-                                                    String label = type == 'loading' ? 'Loaded' : 'Unloaded';
+                                                    String label = (type == 'loading' || status == 'loading') ? 'Loaded' : 'Unloaded';
                                                     actions.add({'action': 'complete_action', 'label': label, 'stopIndex': _selectedStopIndex});
                                                 }
                                             }
