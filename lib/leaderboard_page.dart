@@ -127,10 +127,10 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                                 CircleAvatar(
                                   radius: 20,
                                   backgroundColor: Colors.grey[800],
-                                  backgroundImage: entry.avatarUploadId != null
-                                    ? NetworkImage('${ApiConfig.baseUrl.replaceAll("/api", "")}/uploads/get/${entry.avatarUploadId}?thumb=true')
+                                  backgroundImage: entry.avatarUrl != null
+                                    ? NetworkImage(entry.avatarUrl!)
                                     : null,
-                                  child: entry.avatarUploadId == null
+                                  child: entry.avatarUrl == null
                                       ? const Icon(Icons.person, color: Colors.white54)
                                       : null,
                                 ),

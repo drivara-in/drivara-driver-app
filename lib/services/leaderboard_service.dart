@@ -8,6 +8,7 @@ class LeaderboardEntry {
   final String id;
   final String name;
   final String? avatarUploadId;
+  final String? avatarUrl;
   final double distanceKm;
   final double mileage;
   final int rank;
@@ -16,6 +17,7 @@ class LeaderboardEntry {
     required this.id,
     required this.name,
     this.avatarUploadId,
+    this.avatarUrl,
     required this.distanceKm,
     required this.mileage,
     required this.rank,
@@ -26,6 +28,7 @@ class LeaderboardEntry {
       id: json['id'] ?? '',
       name: json['name'] ?? 'Unknown Driver',
       avatarUploadId: json['avatar_upload_id'],
+      avatarUrl: json['avatar_url'],
       distanceKm: (json['distance_km'] ?? 0).toDouble(),
       mileage: (json['mileage'] ?? 0).toDouble(),
       rank: json['rank'] ?? 0,
