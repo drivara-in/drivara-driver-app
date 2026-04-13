@@ -13,6 +13,8 @@ import 'package:drivara_driver_app/widgets/add_expense_sheet.dart';
 import 'package:drivara_driver_app/widgets/expense_list_sheet.dart';
 import 'package:drivara_driver_app/widgets/action_button_card.dart';
 import 'package:drivara_driver_app/widgets/stop_action_sheet.dart';
+import 'package:drivara_driver_app/widgets/stoppage_reason_sheet.dart';
+import 'package:drivara_driver_app/services/behavior_service.dart';
 import 'package:drivara_driver_app/pages/tyre_management_page.dart';
 import 'leaderboard_page.dart';
 import 'api_config.dart';
@@ -58,6 +60,12 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
   DateTime? _stoppedSince;
   bool _reminderSent = false;
 
+  // Unplanned stoppage state
+  DateTime? _unplannedStopSince;
+  bool _stoppageReasonRequested = false;
+  String? _activeStoppageId;
+  bool _stoppageSheetShowing = false;
+
   JobStreamService? _streamService; // Retained as it's used in _connectStream
   final GlobalKey<dynamic> _mapKey = GlobalKey(); // Using dynamic to access state methods loosely or type it if possible
   
@@ -85,6 +93,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     WidgetsBinding.instance.removeObserver(this);
     _stopPolling();
     _disconnectStream();
+    BehaviorService().stop();
     super.dispose();
   }
 
@@ -102,6 +111,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
       debugPrint("App Paused: Suspending Services (Battery Saving Mode)...");
       _stopPolling();
       _disconnectStream();
+      BehaviorService().stop();
     }
   }
 
@@ -218,6 +228,96 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
       return deg * (math.pi / 180);
   }
 
+  // Check if vehicle is near ANY planned stop (within 2km)
+  bool _isNearAnyPlannedStop(Map<String, dynamic> vehicle) {
+    try {
+      final double vLat = _parseNum(vehicle['location']?['lat'])?.toDouble() ?? 0.0;
+      final double vLng = _parseNum(vehicle['location']?['lng'])?.toDouble() ?? 0.0;
+      if (vLat == 0.0 && vLng == 0.0) return true; // No GPS, assume near stop to avoid false trigger
+
+      var stops = _job['route_stops'];
+      if (stops == null) return false;
+      if (stops is String) return false; // Can't parse
+      final stopsList = (stops as List?) ?? [];
+
+      for (final stop in stopsList) {
+        final double sLat = double.tryParse(stop['lat']?.toString() ?? '') ?? 0.0;
+        final double sLng = double.tryParse(stop['lng']?.toString() ?? '') ?? 0.0;
+        if (sLat == 0.0 && sLng == 0.0) continue;
+        final dist = _getHaversineDistance(vLat, vLng, sLat, sLng);
+        if (dist <= 2.0) return true; // Within 2km of a planned stop
+      }
+    } catch (e) {
+      debugPrint("Near stop check error: $e");
+      return true; // On error, assume near stop to avoid false trigger
+    }
+    return false;
+  }
+
+  void _showStoppageReasonSheet() {
+    if (!mounted || _stoppageSheetShowing) return;
+    _stoppageSheetShowing = true;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(top: MediaQuery.of(ctx).size.height * 0.1),
+        child: StoppageReasonSheet(
+          stoppedSince: _unplannedStopSince ?? DateTime.now(),
+          isLoading: _isActionLoading,
+          onSubmit: (reason, notes, photoId) {
+            Navigator.pop(ctx);
+            _stoppageSheetShowing = false;
+            _submitStoppageReason(reason, notes, photoId);
+          },
+        ),
+      ),
+    ).whenComplete(() {
+      _stoppageSheetShowing = false;
+    });
+  }
+
+  Future<void> _submitStoppageReason(String reason, String? notes, String? photoUploadId) async {
+    try {
+      final vehicle = _dashboardData?['vehicle'] ?? {};
+      final lat = _parseNum(vehicle['location']?['lat'])?.toDouble();
+      final lng = _parseNum(vehicle['location']?['lng'])?.toDouble();
+
+      final response = await ApiConfig.dio.post(
+        '/driver/jobs/${_job['id']}/stoppage',
+        data: {
+          'reason': reason,
+          'notes': notes,
+          'photo_upload_id': photoUploadId,
+          'latitude': lat,
+          'longitude': lng,
+          'started_at': _unplannedStopSince?.toIso8601String() ?? DateTime.now().toIso8601String(),
+        },
+      );
+
+      if (response.statusCode == 200 && response.data?['stoppageId'] != null) {
+        _activeStoppageId = response.data['stoppageId'];
+        debugPrint("[stoppages] Stoppage recorded: $_activeStoppageId reason=$reason");
+      }
+    } catch (e) {
+      debugPrint("[stoppages] Error submitting stoppage: $e");
+    }
+  }
+
+  Future<void> _closeActiveStoppage() async {
+    if (_activeStoppageId == null) return;
+    final stoppageId = _activeStoppageId;
+    try {
+      await ApiConfig.dio.post('/driver/jobs/${_job['id']}/stoppage/$stoppageId/end');
+      debugPrint("[stoppages] Stoppage $stoppageId closed");
+    } catch (e) {
+      debugPrint("[stoppages] Error closing stoppage: $e");
+    }
+  }
+
   void _connectStream() {
     _streamService = JobStreamService(jobId: _job['id']);
     _streamSubscription = _streamService!.connect().listen((data) {
@@ -263,8 +363,23 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
               final bool? ignition = data['ignition'] is bool ? data['ignition'] : data['ignition'].toString().toLowerCase() == 'true';
               final List actions = data['available_actions'] ?? [];
 
+              // --- Behavior Service: accelerometer control ---
+              final double bLat = _parseNum(data['lat'])?.toDouble() ?? 0.0;
+              final double bLng = _parseNum(data['lng'])?.toDouble() ?? 0.0;
+              if (ignition == true) {
+                if (!BehaviorService().isRunning) {
+                  BehaviorService().start(jobId: _job['id']);
+                }
+                BehaviorService().updateVehicleState(speedKmh: speed, lat: bLat, lng: bLng);
+              } else {
+                if (BehaviorService().isRunning) {
+                  BehaviorService().stop();
+                }
+              }
+              // --- End Behavior Service ---
+
               // User definition: Stopped = Ignition OFF
-              // Strictly check ignition. 
+              // Strictly check ignition.
               bool isStopped = (ignition == false);
 
               if (isStopped && actions.isNotEmpty) {
@@ -321,6 +436,34 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                    _stoppedSince = null;
                    _reminderSent = false;
               }
+
+              // --- Unplanned Stoppage Reason Detection ---
+              if (isStopped && !_isNearAnyPlannedStop(vehicle)) {
+                  _unplannedStopSince ??= DateTime.now();
+                  final elapsed = DateTime.now().difference(_unplannedStopSince!);
+                  if (elapsed.inMinutes >= 15 && !_stoppageReasonRequested) {
+                      _stoppageReasonRequested = true;
+                      NotificationService().showNotification(
+                          id: 889,
+                          title: Provider.of<LocalizationProvider>(context, listen: false).t('stoppage_why') ?? "Why did you stop?",
+                          body: Provider.of<LocalizationProvider>(context, listen: false).t('stoppage_provide_reason') ?? "Please provide a reason for stopping",
+                      );
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted && !_stoppageSheetShowing) _showStoppageReasonSheet();
+                      });
+                  }
+              } else if (!isStopped) {
+                  // Vehicle is moving again — close active stoppage
+                  if (_activeStoppageId != null) {
+                      _closeActiveStoppage();
+                  }
+                  _unplannedStopSince = null;
+                  _stoppageReasonRequested = false;
+                  _activeStoppageId = null;
+                  _stoppageSheetShowing = false;
+              }
+              // --- End Stoppage Detection ---
+
            } catch (e) {
                debugPrint("Reminder Error: $e");
            }
