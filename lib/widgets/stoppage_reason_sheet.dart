@@ -12,11 +12,13 @@ class StoppageReasonSheet extends StatefulWidget {
   final Function(String reason, String? notes, String? photoUploadId) onSubmit;
   final DateTime stoppedSince;
   final bool isLoading;
+  final List<Map<String, dynamic>>? apiReasons; // From /api/driver/stoppage-reasons
 
   const StoppageReasonSheet({
     required this.onSubmit,
     required this.stoppedSince,
     this.isLoading = false,
+    this.apiReasons,
     super.key,
   });
 
@@ -35,20 +37,39 @@ class _StoppageReasonSheetState extends State<StoppageReasonSheet> {
   Timer? _timer;
   Duration _elapsed = Duration.zero;
 
-  static const List<Map<String, dynamic>> _reasons = [
-    {'key': 'tea_food', 'locKey': 'stoppage_tea_food', 'icon': Icons.restaurant},
-    {'key': 'rest_sleep', 'locKey': 'stoppage_rest_sleep', 'icon': Icons.hotel},
-    {'key': 'fuel_fill', 'locKey': 'stoppage_fuel_fill', 'icon': Icons.local_gas_station},
-    {'key': 'mechanical_issue', 'locKey': 'stoppage_mechanical_issue', 'icon': Icons.build},
-    {'key': 'tyre_issue', 'locKey': 'stoppage_tyre_issue', 'icon': Icons.tire_repair},
-    {'key': 'traffic_road_block', 'locKey': 'stoppage_traffic', 'icon': Icons.traffic},
-    {'key': 'police_rto_check', 'locKey': 'stoppage_police_rto', 'icon': Icons.local_police},
-    {'key': 'unplanned_loading_unloading', 'locKey': 'stoppage_unplanned_lu', 'icon': Icons.inventory},
-    {'key': 'personal', 'locKey': 'stoppage_personal', 'icon': Icons.person},
-    {'key': 'waiting_instructions', 'locKey': 'stoppage_waiting', 'icon': Icons.hourglass_top},
-    {'key': 'waiting_at_stop', 'locKey': 'stoppage_waiting_at_stop', 'icon': Icons.access_time_filled},
-    {'key': 'other', 'locKey': 'stoppage_other', 'icon': Icons.more_horiz},
+  // Icon mapping for API reasons (icon name string → IconData)
+  static const Map<String, IconData> _iconMap = {
+    'restaurant': Icons.restaurant,
+    'hotel': Icons.hotel,
+    'local_gas_station': Icons.local_gas_station,
+    'build': Icons.build,
+    'tire_repair': Icons.tire_repair,
+    'traffic': Icons.traffic,
+    'local_police': Icons.local_police,
+    'inventory': Icons.inventory,
+    'person': Icons.person,
+    'hourglass_top': Icons.hourglass_top,
+    'access_time_filled': Icons.access_time_filled,
+    'more_horiz': Icons.more_horiz,
+  };
+
+  // Fallback hardcoded reasons (used if API fails)
+  static const List<Map<String, dynamic>> _fallbackReasons = [
+    {'name': 'Tea / Food Break', 'icon': 'restaurant'},
+    {'name': 'Rest / Sleep', 'icon': 'hotel'},
+    {'name': 'Fuel Fill', 'icon': 'local_gas_station'},
+    {'name': 'Mechanical Issue', 'icon': 'build'},
+    {'name': 'Tyre Issue', 'icon': 'tire_repair'},
+    {'name': 'Traffic / Road Block', 'icon': 'traffic'},
+    {'name': 'Police / RTO Check', 'icon': 'local_police'},
+    {'name': 'Loading / Unloading', 'icon': 'inventory'},
+    {'name': 'Personal', 'icon': 'person'},
+    {'name': 'Waiting for Instructions', 'icon': 'hourglass_top'},
+    {'name': 'Waiting at Stop (Job)', 'icon': 'access_time_filled'},
+    {'name': 'Other', 'icon': 'more_horiz'},
   ];
+
+  List<Map<String, dynamic>> get _reasons => widget.apiReasons ?? _fallbackReasons;
 
   @override
   void initState() {
@@ -117,14 +138,14 @@ class _StoppageReasonSheetState extends State<StoppageReasonSheet> {
       setState(() => _errorText = 'Please select a reason');
       return;
     }
-    if (_selectedReason == 'other' && _otherCtrl.text.trim().isEmpty) {
+    if (_selectedReason == 'Other' && _otherCtrl.text.trim().isEmpty) {
       setState(() => _errorText = 'Please specify the reason');
       return;
     }
     setState(() => _errorText = null);
 
     String notes = _notesCtrl.text.trim();
-    if (_selectedReason == 'other') {
+    if (_selectedReason == 'Other') {
       notes = '${_otherCtrl.text.trim()}${notes.isNotEmpty ? '\n$notes' : ''}';
     }
 
@@ -194,24 +215,31 @@ class _StoppageReasonSheetState extends State<StoppageReasonSheet> {
               spacing: 8,
               runSpacing: 8,
               children: _reasons.map((r) {
-                final isSelected = _selectedReason == r['key'];
+                final reasonName = r['name'] as String;
+                final isSelected = _selectedReason == reasonName;
+                // Get translated label: check translations JSONB for current locale, fallback to name
+                final translations = r['translations'] as Map<String, dynamic>? ?? {};
+                final langCode = loc.locale.languageCode;
+                final label = translations[langCode] as String? ?? reasonName;
+                final iconData = _iconMap[r['icon'] as String? ?? 'more_horiz'] ?? Icons.more_horiz;
+
                 return ChoiceChip(
                   label: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        r['icon'] as IconData,
+                        iconData,
                         size: 16,
                         color: isSelected ? Colors.white : Theme.of(context).textTheme.bodyMedium?.color,
                       ),
                       const SizedBox(width: 6),
-                      Text(t(r['locKey'] as String)),
+                      Text(label),
                     ],
                   ),
                   selected: isSelected,
                   onSelected: (selected) {
                     setState(() {
-                      _selectedReason = selected ? r['key'] as String : null;
+                      _selectedReason = selected ? reasonName : null;
                       _errorText = null;
                     });
                   },
@@ -232,7 +260,7 @@ class _StoppageReasonSheetState extends State<StoppageReasonSheet> {
             ),
 
             // "Other" text field
-            if (_selectedReason == 'other') ...[
+            if (_selectedReason == 'Other') ...[
               const SizedBox(height: 16),
               TextField(
                 controller: _otherCtrl,

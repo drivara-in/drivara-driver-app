@@ -65,6 +65,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
   bool _stoppageReasonRequested = false;
   String? _activeStoppageId;
   bool _stoppageSheetShowing = false;
+  List<Map<String, dynamic>>? _stoppageReasons; // Fetched from API
 
   JobStreamService? _streamService; // Retained as it's used in _connectStream
   final GlobalKey<dynamic> _mapKey = GlobalKey(); // Using dynamic to access state methods loosely or type it if possible
@@ -154,6 +155,21 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
       // Fetch data immediately
       _fetchDashboardData();
       _startPolling();
+      _fetchStoppageReasons();
+  }
+
+  Future<void> _fetchStoppageReasons() async {
+    try {
+      final res = await ApiConfig.dio.get('/driver/stoppage-reasons');
+      if (res.statusCode == 200 && res.data is List) {
+        setState(() {
+          _stoppageReasons = (res.data as List).map((r) => Map<String, dynamic>.from(r)).toList();
+        });
+        debugPrint("[stoppages] Fetched ${_stoppageReasons!.length} stoppage reasons from API");
+      }
+    } catch (e) {
+      debugPrint("[stoppages] Failed to fetch reasons, using fallbacks: $e");
+    }
   }
 
   void _startPolling() {
@@ -268,6 +284,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
         child: StoppageReasonSheet(
           stoppedSince: _unplannedStopSince ?? DateTime.now(),
           isLoading: _isActionLoading,
+          apiReasons: _stoppageReasons,
           onSubmit: (reason, notes, photoId) {
             Navigator.pop(ctx);
             _stoppageSheetShowing = false;
