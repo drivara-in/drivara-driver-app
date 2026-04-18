@@ -1611,18 +1611,16 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                                            
                                            if (status == 'pending') {
                                                 if (!tooFar) {
-                                                    if (type == 'loading') {
-                                                        // Loading stop: always require driver to mark arrival (never skip)
-                                                        actions.add({'action': 'reached', 'label': t.t('reached_loading_point') ?? 'Reached Loading Point', 'stopIndex': _selectedStopIndex});
-                                                    } else if (type == 'unloading') {
-                                                        // Unloading stop: always require driver to mark arrival (never skip)
-                                                        actions.add({'action': 'reached', 'label': t.t('reached_unloading_point') ?? 'Reached Unloading Point', 'stopIndex': _selectedStopIndex});
-                                                    } else if (stop['skip_arrived'] == true || _selectedStopIndex == 0) {
-                                                        // Origin / current-location stop — no need to "arrive", go directly to depart
-                                                        actions.add({'action': 'depart', 'label': t.t('action_departed') ?? 'Departed', 'stopIndex': _selectedStopIndex});
+                                                    // SKIP ARRIVED LOGIC: Backend computes skip_arrived based on vehicle-to-stop distance
+                                                    if (stop['skip_arrived'] == true) {
+                                                        // Vehicle was at the starting point — skip arrived, go directly to depart
+                                                         actions.add({'action': 'depart', 'label': t.t('action_departed') ?? 'Departed', 'stopIndex': _selectedStopIndex});
                                                     } else {
-                                                        // Intermediate generic stop
-                                                        actions.add({'action': 'reached', 'label': 'Arrived', 'stopIndex': _selectedStopIndex});
+                                                        String label = 'Arrived';
+                                                        if (type == 'loading') label = t.t('reached_loading_point') ?? 'Reached Loading Point';
+                                                        else if (type == 'unloading') label = t.t('reached_unloading_point') ?? 'Reached Unloading Point';
+                                                        
+                                                        actions.add({'action': 'reached', 'label': label, 'stopIndex': _selectedStopIndex});
                                                     }
                                                 }
                                            } else if (status == 'reached') {
@@ -2110,9 +2108,6 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     final rawLabel = (act['label'] as String? ?? '').toLowerCase();
 
     if (action == 'reached') {
-        final lowerLabel = (act['label'] as String? ?? '').toLowerCase();
-        if (lowerLabel.contains('loading')) return t.t('reached_loading_point') ?? 'Reached Loading Point';
-        if (lowerLabel.contains('unloading')) return t.t('reached_unloading_point') ?? 'Reached Unloading Point';
         return t.t('action_reached') ?? 'Arrived';
     }
     if (action == 'depart') {
