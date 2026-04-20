@@ -15,25 +15,38 @@ import 'providers/theme_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'services/messaging_service.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Strict environment loading (Default: .env)
   const envFile = String.fromEnvironment('ENV_FILE', defaultValue: '.env');
-  
+
   try {
     await dotenv.load(fileName: envFile);
     debugPrint("Loaded $envFile");
   } catch (e) {
     debugPrint("Failed to load $envFile: $e");
     // Optionally rethrow if you want the app to crash on missing config
-    // throw e; 
+    // throw e;
   }
-  
+
   await initializeDateFormatting();
 
+  // Local-notification plugin (used both by FCM foreground handler and
+  // existing reminder logic). FCM init is idempotent — safe if already set up.
+  await NotificationService().init();
+  await MessagingService().init();
+
   final token = await ApiConfig.getAuthToken();
+  // If a user is already logged in (app relaunch), refresh the FCM token
+  // so server-side has the current one even if it rotated while app was closed.
+  if (token != null) {
+    // Fire-and-forget; doesn't block UI.
+    MessagingService().registerAfterLogin();
+  }
   runApp(
     MultiProvider(
       providers: [

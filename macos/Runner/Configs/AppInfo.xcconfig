@@ -8,7 +8,7 @@
 PRODUCT_NAME = drivara_driver_android
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.drivara.drivaraDriverAndroid
+PRODUCT_BUNDLE_IDENTIFIER = com.drivara.drivaraDriver
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2025 com.drivara. All rights reserved.

@@ -50,3 +50,7 @@ app.*.map.json
 *.jks
 key.properties
 *.apk
+
+# Claude credentials
+CLAUDE.md
+.claude/skills/machine-access/

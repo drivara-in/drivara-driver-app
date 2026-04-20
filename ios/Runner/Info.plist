@@ -50,5 +50,13 @@
 		<string>https</string>
 		<string>http</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Drivara monitors the distance between your phone and the vehicle you're assigned to, so your dispatcher is alerted if you get separated from the truck.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Drivara needs background location access while a job is active to keep monitoring the distance between your phone and the vehicle. Tracking stops automatically when the job ends.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 </dict>
 </plist>

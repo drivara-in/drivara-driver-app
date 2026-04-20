@@ -3,6 +3,8 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    // Firebase — reads google-services.json from this directory at build time.
+    id("com.google.gms.google-services")
 }
 
 import java.util.Properties
@@ -11,7 +13,7 @@ import java.io.FileInputStream
 android {
     namespace = "com.drivara.drivara_driver_android"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

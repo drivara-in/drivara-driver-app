@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -5,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:pinput/pinput.dart';
 import 'package:smart_auth/smart_auth.dart';
 import 'api_config.dart';
+import 'services/messaging_service.dart';
 import 'active_job_page.dart';
 import 'no_job_page.dart';
 import 'theme/app_theme.dart';
@@ -79,7 +81,11 @@ class _OtpPageState extends State<OtpPage> {
            }
         }
 
-        // 2. Fetch Active Job
+        // 2. Register FCM token with the backend (fire-and-forget; doesn't
+        //    block navigation if push isn't configured on this device).
+        unawaited(MessagingService().registerAfterLogin());
+
+        // 3. Fetch Active Job
         await _checkActiveJob();
       } else {
         setState(() => _error = response.data['message'] ?? Provider.of<LocalizationProvider>(context, listen: false).t('verification_failed'));

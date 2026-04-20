@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:dio/dio.dart';
 import 'package:provider/provider.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:drivara_driver_app/widgets/live_job_map.dart';
 import 'package:lottie/lottie.dart';
 import 'package:drivara_driver_app/widgets/route_timeline.dart';
@@ -15,6 +16,8 @@ import 'package:drivara_driver_app/widgets/action_button_card.dart';
 import 'package:drivara_driver_app/widgets/stop_action_sheet.dart';
 import 'package:drivara_driver_app/widgets/stoppage_reason_sheet.dart';
 import 'package:drivara_driver_app/services/behavior_service.dart';
+import 'package:drivara_driver_app/services/separation_service.dart';
+import 'package:drivara_driver_app/services/messaging_service.dart';
 import 'package:drivara_driver_app/pages/tyre_management_page.dart';
 import 'leaderboard_page.dart';
 import 'api_config.dart';
@@ -95,6 +98,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     _stopPolling();
     _disconnectStream();
     BehaviorService().stop();
+    SeparationService().stop();
     super.dispose();
   }
 
@@ -102,17 +106,25 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       debugPrint("App Resumed: Restarting Services & Checking Job...");
+      // Emit phone_use event if we were backgrounded while driving.
+      BehaviorService().noteForegrounded();
       _checkGlobalJobStatus(); // Immediate check
-      
+
       // Resume Services
       if (_poller == null || !_poller!.isActive) _startPolling();
       if (_streamService == null || _streamSubscription == null) _connectStream();
-      
+
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
       debugPrint("App Paused: Suspending Services (Battery Saving Mode)...");
+      // Record background-start so we can compute phone_use duration on resume.
+      BehaviorService().noteBackgrounded();
       _stopPolling();
       _disconnectStream();
       BehaviorService().stop();
+      // SeparationService intentionally keeps running — its own foreground
+      // service (Android) / background location mode (iOS) drives the 5-km
+      // breach alert while the app is backgrounded. It's torn down when the
+      // job ends (dispose / _checkGlobalJobStatus terminal state).
     }
   }
 
@@ -394,6 +406,15 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                 }
               }
               // --- End Behavior Service ---
+
+              // --- Separation Service: 5km driver-vehicle distance alert ---
+              if (bLat != 0.0 && bLng != 0.0) {
+                if (!SeparationService().isRunning) {
+                  SeparationService().start(jobId: _job['id']);
+                }
+                SeparationService().updateVehicleLocation(lat: bLat, lng: bLng);
+              }
+              // --- End Separation Service ---
 
               // User definition: Stopped = Ignition OFF
               // Strictly check ignition.
@@ -1455,6 +1476,24 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                             ),
                             const SizedBox(height: 24),
 
+                            // Next Refuel card — only shown when the server returned a fuelPlan
+                            // with at least one upcoming stop. Navigate button deep-links to
+                            // Google Maps (no cost to Drivara — uses driver's own installed app).
+                            if (_dashboardData != null
+                                && _dashboardData!['fuelPlan'] != null
+                                && (_dashboardData!['fuelPlan']['stops'] as List?)?.isNotEmpty == true) ...[
+                              Text(
+                                'Next refuel',
+                                style: AppTextStyles.header.copyWith(
+                                  fontSize: 18,
+                                  color: Theme.of(context).textTheme.bodyLarge?.color,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              _buildNextRefuelCard(_dashboardData!['fuelPlan']),
+                              const SizedBox(height: 24),
+                            ],
+
                             // Route Progress
                             Text(t.t('route_progress'), style: AppTextStyles.header.copyWith(fontSize: 18, color: Theme.of(context).textTheme.bodyLarge?.color)),
                             const SizedBox(height: 12),
@@ -1890,13 +1929,14 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                             icon: const Icon(Icons.logout),
                             color: Theme.of(context).iconTheme.color,
                             onPressed: () async {
+                               await MessagingService().unregisterOnLogout();
                                await ApiConfig.logout();
                                if (!mounted) return;
                                Navigator.of(context).pushAndRemoveUntil(
-                                  MaterialPageRoute(builder: (_) => const LoginPage()), 
+                                  MaterialPageRoute(builder: (_) => const LoginPage()),
                                   (route) => false
                                );
-                            }, 
+                            },
                           )
                         ],
                       )
@@ -1930,6 +1970,216 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
           Text(title, style: AppTextStyles.label.copyWith(color: Theme.of(context).textTheme.bodyMedium?.color)),
           const SizedBox(height: 4),
           Text(amount, style: AppTextStyles.header.copyWith(fontSize: 20, color: Theme.of(context).textTheme.bodyLarge?.color)),
+        ],
+      ),
+    );
+  }
+
+  // Deep-link into the driver's installed map app. Zero cost to Drivara — the driver's
+  // Google Maps (or fallback map app) handles turn-by-turn, re-routing, traffic, voice
+  // guidance. We just hand off the pump's lat/lng.
+  Future<void> _launchMapsNavigation(double lat, double lng, String label) async {
+    // Prefer the native Google Maps navigation URI (launches turn-by-turn directly)
+    final navUri = Uri.parse('google.navigation:q=$lat,$lng');
+    if (await canLaunchUrl(navUri)) {
+      await launchUrl(navUri, mode: LaunchMode.externalApplication);
+      return;
+    }
+    // Fallback: universal Google Maps web URL (opens in whatever map app is registered)
+    final webUri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
+    );
+    await launchUrl(webUri, mode: LaunchMode.externalApplication);
+  }
+
+  Widget _buildNextRefuelCard(Map<String, dynamic> fuelPlan) {
+    final stops = (fuelPlan['stops'] as List?) ?? const [];
+    if (stops.isEmpty) return const SizedBox.shrink();
+    final next = stops.first as Map<String, dynamic>;
+
+    final outletName = (next['outletName'] ?? 'Fuel Stop').toString();
+    final outletAddress = (next['outletAddress'] ?? '').toString();
+    final state = (next['state'] ?? '').toString();
+    final distanceKm = (_parseNum(next['distanceFromStartKm']) ?? 0).toDouble();
+    final fillLiters = (_parseNum(next['fillLiters']) ?? 0).toDouble();
+    final pricePerLiter = (_parseNum(next['pricePerLiter']) ?? 0).toDouble();
+    final fillCostInr = (_parseNum(next['fillCostInr']) ?? 0).toDouble();
+    final lat = (_parseNum(next['lat']) ?? 0).toDouble();
+    final lng = (_parseNum(next['lng']) ?? 0).toDouble();
+    final action = (next['action'] ?? 'fill_partial').toString();
+    final reason = (next['reason'] ?? '').toString();
+    final remainingStops = stops.length > 1 ? stops.length - 1 : 0;
+    final rangeKm = _parseNum(fuelPlan['currentRangeKm']);
+    final currentFuelL = _parseNum(fuelPlan['currentFuelLiters']);
+
+    final actionLabel = action == 'fill_full' ? 'Full tank' : 'Partial fill';
+    final amberOrange = const Color(0xFFF59E0B);
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [amberOrange.withOpacity(0.08), amberOrange.withOpacity(0.02)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: amberOrange.withOpacity(0.35), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header: pump icon + name + distance pill
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: amberOrange,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.local_gas_station, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      outletName,
+                      style: GoogleFonts.inter(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: Theme.of(context).textTheme.bodyLarge?.color,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (outletAddress.isNotEmpty || state.isNotEmpty)
+                      Text(
+                        [outletAddress, state].where((s) => s.isNotEmpty).join(', '),
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: Theme.of(context).textTheme.bodySmall?.color,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: amberOrange.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  'in ${distanceKm.toStringAsFixed(0)} km',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: amberOrange,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          // Fill details row
+          Row(
+            children: [
+              _refuelStat(label: 'Fill', value: '${fillLiters.toStringAsFixed(0)} L', sub: actionLabel),
+              _refuelStat(label: '₹/L', value: '₹${pricePerLiter.toStringAsFixed(1)}'),
+              _refuelStat(
+                label: 'Total',
+                value: '₹${fillCostInr.toStringAsFixed(0)}',
+                highlight: true,
+              ),
+            ],
+          ),
+          if (currentFuelL != null && rangeKm != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Current fuel: ${currentFuelL.toStringAsFixed(0)} L (~${rangeKm.toStringAsFixed(0)} km range)'
+                  '${remainingStops > 0 ? ' · $remainingStops more stop${remainingStops == 1 ? '' : 's'} after this' : ''}',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                color: Theme.of(context).textTheme.bodySmall?.color,
+              ),
+            ),
+          ],
+          if (reason.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              reason,
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontStyle: FontStyle.italic,
+                color: Theme.of(context).textTheme.bodySmall?.color,
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          // Navigate button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: (lat != 0 && lng != 0)
+                  ? () => _launchMapsNavigation(lat, lng, outletName)
+                  : null,
+              icon: const Icon(Icons.navigation_rounded, size: 18),
+              label: const Text('Navigate'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: amberOrange,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                textStyle: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _refuelStat({required String label, required String value, String? sub, bool highlight = false}) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              letterSpacing: 0.5,
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).textTheme.bodySmall?.color,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            style: GoogleFonts.inter(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: highlight
+                  ? const Color(0xFF047857)
+                  : Theme.of(context).textTheme.bodyLarge?.color,
+            ),
+          ),
+          if (sub != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              sub,
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                color: Theme.of(context).textTheme.bodySmall?.color,
+              ),
+            ),
+          ],
         ],
       ),
     );
