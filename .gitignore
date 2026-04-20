@@ -51,6 +51,11 @@ app.*.map.json
 key.properties
 *.apk
 
+# Firebase configs — public repo; inject via CI from secrets rather than commit
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+
 # Claude credentials
 CLAUDE.md
 .claude/skills/machine-access/
+.claude/
