@@ -25,6 +25,16 @@ class MessagingService {
   StreamSubscription<String>? _refreshSub;
   bool _initialized = false;
 
+  /// Broadcasts notification taps (user tapped a push). Main.dart listens
+  /// and navigates — typically to the active job page for fuel-pump
+  /// proximity alerts, separation alerts, etc. Covers both:
+  ///   - `onMessageOpenedApp` — app was backgrounded, user tapped push
+  ///   - `getInitialMessage` — app was terminated, launched by push tap
+  final StreamController<RemoteMessage> _notificationTappedController =
+      StreamController<RemoteMessage>.broadcast();
+  Stream<RemoteMessage> get onNotificationTapped =>
+      _notificationTappedController.stream;
+
   String? get currentToken => _currentToken;
 
   /// Initialise Firebase + FCM listeners. Idempotent; safe to call multiple
@@ -59,6 +69,29 @@ class MessagingService {
         body: notif.body ?? "",
         payload: msg.data['deep_link'] as String?,
       );
+    });
+
+    // App was backgrounded and user tapped the OS notification tray entry →
+    // app comes to foreground. Forward to the listener so it can navigate.
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage msg) {
+      debugPrint("[messaging] opened from background via notification: ${msg.messageId}");
+      if (!_notificationTappedController.isClosed) {
+        _notificationTappedController.add(msg);
+      }
+    });
+
+    // App was fully terminated and launched by tapping a notification.
+    // getInitialMessage returns the message once.
+    FirebaseMessaging.instance.getInitialMessage().then((msg) {
+      if (msg != null) {
+        debugPrint("[messaging] launched from terminated state via notification: ${msg.messageId}");
+        // Delay slightly so the root widget has mounted + listener is attached.
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (!_notificationTappedController.isClosed) {
+            _notificationTappedController.add(msg);
+          }
+        });
+      }
     });
 
     // Token-refresh handler — re-register when FCM rotates the token.

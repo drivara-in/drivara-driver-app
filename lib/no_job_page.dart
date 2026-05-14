@@ -107,7 +107,7 @@ class _NoJobPageState extends State<NoJobPage> with WidgetsBindingObserver {
                     );
                   },
                   icon: const Icon(Icons.leaderboard),
-                  label: const Text("View Leaderboard"),
+                  label: Text(Provider.of<LocalizationProvider>(context, listen: false).t('view_leaderboard') ?? 'View Leaderboard'),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),

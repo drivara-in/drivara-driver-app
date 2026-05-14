@@ -165,7 +165,7 @@ class _StopActionSheetState extends State<StopActionSheet> {
                       child: ElevatedButton.icon(
                         onPressed: _isUploading ? null : () => _pickImage(ImageSource.camera),
                         icon: _isUploading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.camera_alt),
-                        label: const Text("Camera"),
+                        label: Text(Provider.of<LocalizationProvider>(context, listen: false).t('camera')),
                         style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).cardColor, foregroundColor: Theme.of(context).textTheme.bodyLarge?.color, elevation: 0, padding: const EdgeInsets.symmetric(vertical: 16), side: BorderSide(color: Theme.of(context).dividerColor)),
                       ),
                     ),
@@ -174,7 +174,7 @@ class _StopActionSheetState extends State<StopActionSheet> {
                       child: ElevatedButton.icon(
                         onPressed: _isUploading ? null : () => _pickImage(ImageSource.gallery),
                         icon: _isUploading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.photo_library),
-                        label: const Text("Gallery"),
+                        label: Text(Provider.of<LocalizationProvider>(context, listen: false).t('gallery')),
                         style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).cardColor, foregroundColor: Theme.of(context).textTheme.bodyLarge?.color, elevation: 0, padding: const EdgeInsets.symmetric(vertical: 16), side: BorderSide(color: Theme.of(context).dividerColor)),
                       ),
                     ),

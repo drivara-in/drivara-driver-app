@@ -330,7 +330,7 @@ class _StoppageReasonSheetState extends State<StoppageReasonSheet> {
                       icon: _isUploading
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                           : const Icon(Icons.camera_alt),
-                      label: const Text("Camera"),
+                      label: Text(Provider.of<LocalizationProvider>(context, listen: false).t('camera')),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).cardColor,
                         foregroundColor: Theme.of(context).textTheme.bodyLarge?.color,
@@ -347,7 +347,7 @@ class _StoppageReasonSheetState extends State<StoppageReasonSheet> {
                       icon: _isUploading
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                           : const Icon(Icons.photo_library),
-                      label: const Text("Gallery"),
+                      label: Text(Provider.of<LocalizationProvider>(context, listen: false).t('gallery')),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).cardColor,
                         foregroundColor: Theme.of(context).textTheme.bodyLarge?.color,

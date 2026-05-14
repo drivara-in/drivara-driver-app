@@ -95,43 +95,184 @@ class RouteTimelineWidget extends StatelessWidget {
     );
   }
 
+  double _stopPosition(int index, int stopCount) {
+    final stop = stops![index];
+    if (stop.containsKey('proportional_position')) {
+      return (stop['proportional_position'] as num).toDouble();
+    }
+    return stopCount > 1 ? index / (stopCount - 1) : 0.0;
+  }
+
+  /// Group stops whose marker positions overlap into clusters.
+  /// Returns clusters of stop indices, ordered by position along the timeline.
+  List<List<int>> _buildClusters(double lineWidth, int stopCount, double overlapPx) {
+    final positions = List<double>.generate(
+      stopCount,
+      (i) => lineWidth * _stopPosition(i, stopCount),
+    );
+    final sorted = List<int>.generate(stopCount, (i) => i)
+      ..sort((a, b) => positions[a].compareTo(positions[b]));
+
+    final clusters = <List<int>>[];
+    List<int>? cur;
+    for (final idx in sorted) {
+      if (cur == null) {
+        cur = [idx];
+        continue;
+      }
+      final lastPos = positions[cur.last];
+      if ((positions[idx] - lastPos).abs() < overlapPx) {
+        cur.add(idx);
+      } else {
+        clusters.add(cur);
+        cur = [idx];
+      }
+    }
+    if (cur != null) clusters.add(cur);
+    return clusters;
+  }
+
+  void _showClusterDisambiguation(BuildContext context, List<int> indices) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withOpacity(0.4),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    Provider.of<LocalizationProvider>(context, listen: false)
+                        .t('multiple_stops_here'),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    Provider.of<LocalizationProvider>(context, listen: false)
+                        .t('pick_the_correct_stop'),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).hintColor,
+                        ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: indices.length,
+                  separatorBuilder: (_, __) =>
+                      const Divider(height: 1, indent: 16, endIndent: 16),
+                  itemBuilder: (_, i) {
+                    final idx = indices[i];
+                    final s = stops![idx];
+                    final activity = s['activity'] as String?;
+                    final addr = (s['address'] ?? s['label'] ?? 'Stop ${idx + 1}')
+                        .toString();
+                    final isSelected = selectedStopIndex == idx;
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: _getActivityColor(activity),
+                        child: Text(
+                          _getStopLabel(idx),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        addr,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: isSelected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
+                      ),
+                      subtitle: activity != null && activity.isNotEmpty
+                          ? Text(activity.toUpperCase())
+                          : null,
+                      trailing: isSelected
+                          ? Icon(Icons.check_circle, color: activeColor)
+                          : const Icon(Icons.chevron_right),
+                      onTap: () {
+                        Navigator.of(sheetCtx).pop();
+                        if (onStopTap != null) onStopTap!(idx);
+                      },
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildStopsTimeline(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final totalWidth = constraints.maxWidth;
         final stopCount = stops!.length;
-        
+
         // Ensure we reserve space for the 30px (approx) markers so they don't clip
         const double markerSize = 30.0;
         const double halfMarker = markerSize / 2;
-        
+
         // Effective width for the connecting line
-        final double lineWidth = totalWidth - markerSize; 
-        
+        final double lineWidth = totalWidth - markerSize;
+
+        // Detect overlapping stops and group them into clusters so the driver
+        // can disambiguate via a bottom sheet when two stops are visually
+        // stacked on the timeline.
+        const double overlapThresholdPx = markerSize * 0.7;
+        final clusters =
+            _buildClusters(lineWidth, stopCount, overlapThresholdPx);
+
         // Check collision (Vehicle vs Stops) - Hide vehicle if overlapping stop
         // Vehicle pos logic: left: halfMarker + (lineWidth * progress) - 12
         // Stop pos logic: left: leftPos (lineWidth * t)
         // Threshold: markerSize (30) / 2 = 15 approx. Let's use 10px tolerance.
-        
+
         bool isOverlapping = false;
         final double vehicleActualLeft = (lineWidth * progress.clamp(0.0, 1.0)); // Relative to line start
-        
+
         for (int i = 0; i < stopCount; i++) {
-            final stop = stops![i];
-            double t = 0.0;
-            if (stop.containsKey('proportional_position')) {
-                t = (stop['proportional_position'] as num).toDouble();
-            } else {
-                t = stopCount > 1 ? i / (stopCount - 1) : 0.0;
-            }
-            final double stopLeft = lineWidth * t;
-            
+            final double stopLeft = lineWidth * _stopPosition(i, stopCount);
+
             if ((vehicleActualLeft - stopLeft).abs() < 15.0) { // Increased threshold to 15px to cover the marker radius
                 isOverlapping = true;
                 break;
             }
         }
-        
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -168,54 +309,158 @@ class RouteTimelineWidget extends StatelessWidget {
                     ),
                   ),
                   
-                  // Stop markers
-                  ...List.generate(stopCount, (index) {
-                    final stop = stops![index];
-                    final activity = stop['activity'] as String?;
-                    final isSelected = selectedStopIndex == index;
-                    
-                    // 0.0 to 1.0 along the line (Priority: Proportional Position)
-                    double t = 0.0;
-                    if (stop.containsKey('proportional_position')) {
-                        t = (stop['proportional_position'] as num).toDouble();
-                    } else {
-                        // Fallback to equal spacing
-                        t = stopCount > 1 ? index / (stopCount - 1) : 0.0;
-                    }
-                    
-                    final double leftPos = lineWidth * t;
-                    
-                    return Positioned(
-                      left: leftPos, 
-                      top: 4, // Adjust for larger container
-                      child: GestureDetector(
-                        onTap: () {
-                           if (onStopTap != null) onStopTap!(index);
-                        },
-                        child: Column(
-                          children: [
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              width: isSelected ? 40 : markerSize,
-                              height: isSelected ? 40 : markerSize,
-                              decoration: BoxDecoration(
-                                color: _getActivityColor(activity),
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: isSelected ? Colors.white : Colors.white.withOpacity(0.8),
-                                  width: isSelected ? 4 : 2,
-                                ),
-                                boxShadow: isSelected ? [
-                                  BoxShadow(color: _getActivityColor(activity).withOpacity(0.5), blurRadius: 10, spreadRadius: 2)
-                                ] : null
+                  // Stop markers (cluster-aware: collapses overlapping stops
+                  // into a single cluster marker so the driver can pick
+                  // explicitly from a bottom sheet).
+                  ...clusters.map((cluster) {
+                    if (cluster.length == 1) {
+                      final index = cluster.first;
+                      final stop = stops![index];
+                      final activity = stop['activity'] as String?;
+                      final isSelected = selectedStopIndex == index;
+                      final double leftPos =
+                          lineWidth * _stopPosition(index, stopCount);
+
+                      return Positioned(
+                        left: leftPos,
+                        top: 4,
+                        child: GestureDetector(
+                          onTap: () {
+                            if (onStopTap != null) onStopTap!(index);
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            width: isSelected ? 40 : markerSize,
+                            height: isSelected ? 40 : markerSize,
+                            decoration: BoxDecoration(
+                              color: _getActivityColor(activity),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isSelected
+                                    ? Colors.white
+                                    : Colors.white.withOpacity(0.8),
+                                width: isSelected ? 4 : 2,
                               ),
-                              child: Icon(
-                                _getActivityIcon(activity),
-                                size: isSelected ? 20 : 16,
-                                color: Colors.white,
-                               ),
+                              boxShadow: isSelected
+                                  ? [
+                                      BoxShadow(
+                                        color: _getActivityColor(activity)
+                                            .withOpacity(0.5),
+                                        blurRadius: 10,
+                                        spreadRadius: 2,
+                                      )
+                                    ]
+                                  : null,
                             ),
-                          ],
+                            child: Icon(
+                              _getActivityIcon(activity),
+                              size: isSelected ? 20 : 16,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+
+                    // Cluster of 2+ overlapping stops: render a stacked
+                    // marker with a count badge. Tap → disambiguation sheet.
+                    final containsSelected = selectedStopIndex != null &&
+                        cluster.contains(selectedStopIndex);
+                    final repIndex = containsSelected
+                        ? selectedStopIndex!
+                        : cluster.first;
+                    final activity = stops![repIndex]['activity'] as String?;
+                    final repColor = _getActivityColor(activity);
+                    final double avgT = cluster
+                            .map((i) => _stopPosition(i, stopCount))
+                            .reduce((a, b) => a + b) /
+                        cluster.length;
+                    final double leftPos = lineWidth * avgT;
+                    final size = containsSelected ? 40.0 : markerSize;
+
+                    return Positioned(
+                      left: leftPos,
+                      top: 4,
+                      child: GestureDetector(
+                        onTap: () =>
+                            _showClusterDisambiguation(context, cluster),
+                        child: SizedBox(
+                          width: size + 6,
+                          height: size + 6,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              // Back card (offset) to suggest a stack.
+                              Positioned(
+                                left: 4,
+                                top: 4,
+                                child: Container(
+                                  width: size,
+                                  height: size,
+                                  decoration: BoxDecoration(
+                                    color: repColor.withOpacity(0.55),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white.withOpacity(0.6),
+                                      width: 2,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              // Front card.
+                              Container(
+                                width: size,
+                                height: size,
+                                decoration: BoxDecoration(
+                                  color: repColor,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: containsSelected
+                                        ? Colors.white
+                                        : Colors.white.withOpacity(0.85),
+                                    width: containsSelected ? 4 : 2,
+                                  ),
+                                  boxShadow: containsSelected
+                                      ? [
+                                          BoxShadow(
+                                            color: repColor.withOpacity(0.5),
+                                            blurRadius: 10,
+                                            spreadRadius: 2,
+                                          )
+                                        ]
+                                      : null,
+                                ),
+                                child: Icon(
+                                  Icons.layers,
+                                  size: containsSelected ? 20 : 16,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              // Count badge.
+                              Positioned(
+                                right: -2,
+                                top: -2,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 5, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: Colors.redAccent,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                        color: Colors.white, width: 1.5),
+                                  ),
+                                  child: Text(
+                                    '${cluster.length}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     );
@@ -241,41 +486,58 @@ class RouteTimelineWidget extends StatelessWidget {
             ),
             const SizedBox(height: 8),
 
-            // Stop labels (A, B, C...) - Using Stack for precise alignment
+            // Stop labels (A, B, C...) — cluster-aware: a single label per
+            // cluster (e.g. "A,B" or "A+2") so labels never visually stack.
             SizedBox(
                height: 20,
                width: totalWidth,
                child: Stack(
-                 children: List.generate(stopCount, (index) {
-                   final stop = stops![index];
-                   final activity = stop['activity'] as String?;
-                   final isSelected = selectedStopIndex == index;
-                   
-                   double t = stop.containsKey('proportional_position') 
-                      ? (stop['proportional_position'] as num).toDouble() 
-                      : (stopCount > 1 ? index / (stopCount - 1) : 0.0);
-                      
-                   final double leftPos = lineWidth * t; // Same calculation as markers
-                   
+                 children: clusters.map((cluster) {
+                   final activity = stops![cluster.first]['activity'] as String?;
+                   final containsSelected = selectedStopIndex != null &&
+                       cluster.contains(selectedStopIndex);
+                   final double avgT = cluster
+                           .map((i) => _stopPosition(i, stopCount))
+                           .reduce((a, b) => a + b) /
+                       cluster.length;
+                   final double leftPos = lineWidth * avgT;
+
+                   String labelText;
+                   if (cluster.length == 1) {
+                     labelText = _getStopLabel(cluster.first);
+                   } else if (cluster.length == 2) {
+                     labelText =
+                         '${_getStopLabel(cluster[0])},${_getStopLabel(cluster[1])}';
+                   } else {
+                     labelText =
+                         '${_getStopLabel(cluster.first)}+${cluster.length - 1}';
+                   }
+
                    return Positioned(
                       left: leftPos,
-                      width: markerSize, // Center within the marker width
+                      width: markerSize,
                       child: InkWell(
                          onTap: () {
-                            if (onStopTap != null) onStopTap!(index);
+                            if (cluster.length == 1) {
+                              if (onStopTap != null) onStopTap!(cluster.first);
+                            } else {
+                              _showClusterDisambiguation(context, cluster);
+                            }
                          },
                          child: Text(
-                           _getStopLabel(index),
+                           labelText,
                            textAlign: TextAlign.center,
                            style: TextStyle(
                              color: _getActivityColor(activity),
-                             fontSize: isSelected ? 12 : 10,
-                             fontWeight: isSelected ? FontWeight.w900 : FontWeight.bold,
+                             fontSize: containsSelected ? 12 : 10,
+                             fontWeight: containsSelected
+                                 ? FontWeight.w900
+                                 : FontWeight.bold,
                            ),
                          ),
                       ),
                    );
-                 }),
+                 }).toList(),
                ),
             ),
             

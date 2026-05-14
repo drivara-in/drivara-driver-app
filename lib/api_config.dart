@@ -7,18 +7,37 @@ import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 
 class ApiConfig {
-  // Read API base URL from .env file, fallback to localhost for emulator
+  // Compile-time fallback — used when dotenv didn't initialise (e.g. asset
+  // bundle was stale after a new native plugin was added without a full
+  // rebuild). The launcher (run.sh --android-{dev,prod}) injects the
+  // matching URL via --dart-define=API_BASE_URL so the fallback honors
+  // whichever environment the user actually launched. Hard default is dev,
+  // so an unflagged plain `flutter run` still hits a working API.
+  static const String _compileFallbackBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://dev.drivara.in/api',
+  );
+
+  // Read API base URL from .env file, with bulletproof fallback. flutter_dotenv
+  // throws NotInitializedError on env access if `load()` failed/was skipped —
+  // wrap the read so a missing-config crashes the network call rather than
+  // dotenv-throwing two layers up.
   static String get baseUrl {
-    final envUrl = dotenv.env['API_BASE_URL'];
+    String? envUrl;
+    try {
+      envUrl = dotenv.env['API_BASE_URL'];
+    } catch (e) {
+      debugPrint('[ApiConfig] dotenv not initialised — using compile fallback ($e)');
+      return _compileFallbackBaseUrl;
+    }
     if (envUrl != null && envUrl.isNotEmpty) {
       if (envUrl.endsWith('/api')) {
         return envUrl;
       }
       return '$envUrl/api';
     }
-    // Fallback to localhost (works for emulator)
-    return 'http://localhost:8080/api';
-  } 
+    return _compileFallbackBaseUrl;
+  }
 
   static Dio _createDio() {
     final dio = Dio(BaseOptions(

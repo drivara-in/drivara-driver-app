@@ -18,10 +18,17 @@ class LiveJobMap extends StatefulWidget {
     required this.vehicle,
     this.fuelStations,
     this.onFuelStationTap,
+    this.plannedFuelStops,
+    this.onPlannedFuelStopTap,
   });
 
   final List<Map<String, dynamic>>? fuelStations;
   final Function(Map<String, dynamic>)? onFuelStationTap;
+  /// Fuel stops from the server's live fuel plan (computeLiveFuelPlanForJob).
+  /// Each entry has lat/lng, outletName, fillLiters, pricePerLiter, fillCostInr,
+  /// action ('fill_full' | 'fill_partial'), distanceFromStartKm, etc.
+  final List<Map<String, dynamic>>? plannedFuelStops;
+  final Function(Map<String, dynamic>)? onPlannedFuelStopTap;
 
   @override
   State<LiveJobMap> createState() => _LiveJobMapState();
@@ -94,10 +101,12 @@ class _LiveJobMapState extends State<LiveJobMap> {
     super.didUpdateWidget(oldWidget);
     
     bool fuelChanged = widget.fuelStations != oldWidget.fuelStations;
-    
-    if (widget.job != oldWidget.job || 
-        widget.vehicle != oldWidget.vehicle || 
-        fuelChanged) {
+    bool plannedFuelChanged = widget.plannedFuelStops != oldWidget.plannedFuelStops;
+
+    if (widget.job != oldWidget.job ||
+        widget.vehicle != oldWidget.vehicle ||
+        fuelChanged ||
+        plannedFuelChanged) {
       _parseJobData(refitBounds: fuelChanged);
     }
     _loadMapStyle();
@@ -189,6 +198,39 @@ class _LiveJobMapState extends State<LiveJobMap> {
     }
 
     // 3. Polyline
+    //  a) The pre-computed JOB route (from server's route_polyline) is the
+    //     ground-truth path the dispatcher / strategy planned. Always shown
+    //     as a thin underlying line so the driver sees the full trip with
+    //     all waypoints — fuel stops + user stops included.
+    //  b) The override curve (driver tapped a fuel-station chip and we
+    //     fetched a fresh Google Directions response) overlays on top in
+    //     the primary color when active.
+    // Prefer the live-recomputed `active_polyline` (set by the route-deviation
+    // worker after the driver sustained off-route) and fall back to the
+    // dispatcher's original `route_polyline`. Without this preference the
+    // phone would keep showing the old planned line even after a successful
+    // re-route on the server.
+    final encodedJobRoute = (widget.job['active_polyline']?.toString().isNotEmpty == true
+            ? widget.job['active_polyline']
+            : widget.job['route_polyline'])?.toString();
+    if (encodedJobRoute != null && encodedJobRoute.isNotEmpty) {
+      final pts = _decodePolyline(encodedJobRoute);
+      if (pts.length >= 2) {
+        // Solid primary line, full opacity. Width 6 so it's clearly visible
+        // even when zoomed in following the truck. Override curve (when the
+        // driver taps a fuel chip) renders on top with white casing.
+        polylines.add(Polyline(
+          polylineId: const PolylineId('job-route'),
+          points: pts,
+          color: Theme.of(context).primaryColor,
+          width: 6,
+          jointType: JointType.round,
+          startCap: Cap.roundCap,
+          endCap: Cap.roundCap,
+        ));
+      }
+    }
+
     if (vehiclePos != null && destPos != null) {
       if (_overrideRouteCurve != null && _overrideRouteCurve!.isNotEmpty) {
            polylines.add(Polyline(
@@ -200,7 +242,61 @@ class _LiveJobMapState extends State<LiveJobMap> {
             startCap: Cap.roundCap,
             endCap: Cap.buttCap,
          ));
-      } 
+      }
+    }
+
+    // 3b. User-stop waypoints (loading / unloading / generic) along the route.
+    //     Color-coded so the driver instantly sees what kind of stop each
+    //     waypoint is. Final destination is already drawn above; we skip
+    //     duplicates by index.
+    final routeStops = (widget.job['route_stops'] as List?) ?? const [];
+    for (int i = 0; i < routeStops.length; i++) {
+      final raw = routeStops[i];
+      if (raw is! Map) continue;
+      final s = raw as Map<String, dynamic>;
+      final lat = double.tryParse((s['lat'] ?? s['latitude']).toString());
+      final lng = double.tryParse((s['lng'] ?? s['longitude']).toString());
+      if (lat == null || lng == null || (lat == 0 && lng == 0)) continue;
+
+      // Skip if this is the same as destination already plotted.
+      if (destPos != null
+          && (lat - destPos.latitude).abs() < 0.0005
+          && (lng - destPos.longitude).abs() < 0.0005) {
+        continue;
+      }
+
+      final type = (s['type'] ?? s['stop_type'] ?? s['activity'] ?? '').toString().toLowerCase();
+      final letter = String.fromCharCode(65 + i);
+      double hue;
+      String typeLabel;
+      switch (type) {
+        case 'loading':
+          hue = BitmapDescriptor.hueGreen;
+          typeLabel = 'Loading';
+          break;
+        case 'unloading':
+          hue = BitmapDescriptor.hueOrange;
+          typeLabel = 'Unloading';
+          break;
+        default:
+          hue = BitmapDescriptor.hueAzure;
+          typeLabel = 'Stop';
+      }
+      final status = (s['status'] ?? '').toString().toLowerCase();
+      final completed = status == 'completed' || status == 'departed' || status == 'skipped';
+      // Faded marker for completed stops so the driver visually tracks progress.
+      if (completed) hue = BitmapDescriptor.hueViolet;
+
+      markers.add(Marker(
+        markerId: MarkerId('user-stop-$i'),
+        position: LatLng(lat, lng),
+        icon: BitmapDescriptor.defaultMarkerWithHue(hue),
+        infoWindow: InfoWindow(
+          title: '$letter · $typeLabel',
+          snippet: (s['address'] ?? s['label'] ?? '').toString(),
+        ),
+        zIndex: 0,
+      ));
     }
 
     // 4. Fuel Stations
@@ -209,15 +305,15 @@ class _LiveJobMapState extends State<LiveJobMap> {
       for (var currStation in widget.fuelStations!) {
         final lat = double.tryParse(currStation['lat'].toString());
         final lng = double.tryParse(currStation['lng'].toString());
-        
+
         if (lat != null && lng != null) {
            final pos = LatLng(lat, lng);
            fuelPositions.add(pos);
-           
+
            markers.add(Marker(
              markerId: MarkerId('station_${currStation['place_id']}'),
              position: pos,
-             icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueYellow), 
+             icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueYellow),
              infoWindow: InfoWindow(
                title: currStation['name'],
                snippet: Provider.of<LocalizationProvider>(context, listen: false).t('tap_to_navigate'),
@@ -227,9 +323,56 @@ class _LiveJobMapState extends State<LiveJobMap> {
                  }
                }
              ),
-             zIndex: 1, 
+             zIndex: 1,
            ));
         }
+      }
+    }
+
+    // 5. Planned Fuel Stops (from server's live fuel strategy)
+    // Rendered as ORANGE markers to distinguish from user-requested nearby
+    // pumps (yellow, above). Info window shows fill amount + price + total.
+    if (widget.plannedFuelStops != null) {
+      for (int i = 0; i < widget.plannedFuelStops!.length; i++) {
+        final stop = widget.plannedFuelStops![i];
+        final lat = double.tryParse(stop['lat']?.toString() ?? '');
+        final lng = double.tryParse(stop['lng']?.toString() ?? '');
+        if (lat == null || lng == null) continue;
+
+        final pos = LatLng(lat, lng);
+        final outletName = (stop['outletName'] ?? 'Fuel stop').toString();
+        final fillL = double.tryParse(stop['fillLiters']?.toString() ?? '') ?? 0;
+        final pricePerL = double.tryParse(stop['pricePerLiter']?.toString() ?? '') ?? 0;
+        final cost = double.tryParse(stop['fillCostInr']?.toString() ?? '')
+            ?? (fillL * pricePerL);
+        final action = (stop['action'] ?? 'fill_partial').toString();
+        // Localized action label + "Full tank" never shows an explicit
+        // litres figure (driver doesn't pre-meter; pump auto-stops at full).
+        final t = Provider.of<LocalizationProvider>(context, listen: false);
+        final isFullTank = action == 'fill_full';
+        final actionLabel = isFullTank
+            ? (t.t('fill_full') ?? 'Full tank')
+            : (t.t('fill_partial') ?? 'Partial');
+        final litreShort = t.t('unit_litre_short') ?? 'L';
+        final snippet = isFullTank
+            ? '$actionLabel · ₹${pricePerL.toStringAsFixed(1)}/$litreShort · ₹${cost.toStringAsFixed(0)}'
+            : '$actionLabel · ${fillL.toStringAsFixed(0)}$litreShort @ ₹${pricePerL.toStringAsFixed(1)}/$litreShort · ₹${cost.toStringAsFixed(0)}';
+
+        markers.add(Marker(
+          markerId: MarkerId('planned_fuel_$i'),
+          position: pos,
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+          infoWindow: InfoWindow(
+            title: outletName,
+            snippet: snippet,
+            onTap: () {
+              if (widget.onPlannedFuelStopTap != null) {
+                widget.onPlannedFuelStopTap!(stop);
+              }
+            },
+          ),
+          zIndex: 1,
+        ));
       }
     }
 
@@ -401,10 +544,45 @@ class _LiveJobMapState extends State<LiveJobMap> {
       myLocationEnabled: false,
       myLocationButtonEnabled: false,
       mapToolbarEnabled: false,
-      compassEnabled: false, 
+      compassEnabled: false,
       rotateGesturesEnabled: true,
       tiltGesturesEnabled: true,
-      trafficEnabled: false, 
+      trafficEnabled: false,
     );
+  }
+
+  /// Standard Google encoded-polyline decoder (precision 5). Mirrors the
+  /// helper in find_fuel_service.dart so the map can render the job's
+  /// pre-computed route_polyline directly without an extra HTTP call.
+  List<LatLng> _decodePolyline(String encoded) {
+    final List<LatLng> points = [];
+    int index = 0;
+    final int len = encoded.length;
+    int lat = 0;
+    int lng = 0;
+
+    while (index < len) {
+      int b, shift = 0, result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      final int dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lat += dlat;
+
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      final int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lng += dlng;
+
+      points.add(LatLng(lat / 1E5, lng / 1E5));
+    }
+    return points;
   }
 }

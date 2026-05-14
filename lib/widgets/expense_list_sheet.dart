@@ -16,18 +16,42 @@ class ExpenseListSheet extends StatefulWidget {
   State<ExpenseListSheet> createState() => _ExpenseListSheetState();
 }
 
-class _ExpenseListSheetState extends State<ExpenseListSheet> {
+class _ExpenseListSheetState extends State<ExpenseListSheet>
+    with SingleTickerProviderStateMixin {
   bool _isLoading = true;
   List<dynamic> _expenses = [];
   String? _currentDriverId;
   Map<String, Map<String, dynamic>> _typeTranslations = {};
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     _fetchDriverId();
     _fetchExpenses();
     _fetchExpenseTypes();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  /// Filter the unified expenses list per tab. Tabs are not partitions —
+  /// a manual fuel entry shows in BOTH "Driver" (because source==manual)
+  /// and "Fuel" (because category==fuel).
+  List<dynamic> _filterFor(int tabIndex) {
+    switch (tabIndex) {
+      case 1: // Fuel
+        return _expenses.where((e) => (e['category'] ?? '') == 'fuel').toList();
+      case 2: // Fastag
+        return _expenses.where((e) => (e['category'] ?? '') == 'fastag').toList();
+      case 0: // Driver — only manual entries
+      default:
+        return _expenses.where((e) => (e['source'] ?? '') == 'manual').toList();
+    }
   }
 
   Future<void> _fetchExpenseTypes() async {
@@ -72,12 +96,13 @@ class _ExpenseListSheetState extends State<ExpenseListSheet> {
   @override
   Widget build(BuildContext context) {
     final t = Provider.of<LocalizationProvider>(context);
-    
+    final theme = Theme.of(context);
+
     return Container(
-      height: MediaQuery.of(context).size.height * 0.75,
-      padding: const EdgeInsets.only(left: 24, right: 24, top: 24, bottom: 24),
+      height: MediaQuery.of(context).size.height * 0.78,
+      padding: const EdgeInsets.only(left: 24, right: 24, top: 24, bottom: 0),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardTheme.color,
+        color: theme.cardTheme.color,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
@@ -91,7 +116,7 @@ class _ExpenseListSheetState extends State<ExpenseListSheet> {
                   t.t('submitted_expenses'),
                   style: AppTextStyles.header.copyWith(
                     fontSize: 20,
-                    color: Theme.of(context).textTheme.bodyLarge?.color
+                    color: theme.textTheme.bodyLarge?.color,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -102,50 +127,73 @@ class _ExpenseListSheetState extends State<ExpenseListSheet> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          
-          if (_isLoading)
-            const Expanded(
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (_expenses.isEmpty)
-            Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.receipt_long_outlined,
-                      size: 64,
-                      color: Theme.of(context).disabledColor,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      t.t('no_expenses'),
-                      style: TextStyle(
-                        color: Theme.of(context).disabledColor,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: _fetchExpenses,
-                child: ListView.separated(
-                  itemCount: _expenses.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final expense = _expenses[index];
-                    return _buildExpenseCard(expense, t);
-                  },
-                ),
+          const SizedBox(height: 8),
+
+          // Tabs: Driver (manual) · Fuel (manual + card) · Fastag (manual + wallet).
+          TabBar(
+            controller: _tabController,
+            isScrollable: false,
+            labelColor: theme.primaryColor,
+            unselectedLabelColor: theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
+            indicatorColor: theme.primaryColor,
+            indicatorSize: TabBarIndicatorSize.label,
+            labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            tabs: [
+              Tab(text: t.t('tab_driver') ?? 'Driver'),
+              Tab(text: t.t('tab_fuel')   ?? 'Fuel'),
+              Tab(text: t.t('tab_fastag') ?? 'Fastag'),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildTabList(_filterFor(0), t),
+                      _buildTabList(_filterFor(1), t),
+                      _buildTabList(_filterFor(2), t),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabList(List<dynamic> rows, LocalizationProvider t) {
+    if (rows.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.receipt_long_outlined,
+              size: 64,
+              color: Theme.of(context).disabledColor,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              t.t('no_expenses') ?? 'No expenses',
+              style: TextStyle(
+                color: Theme.of(context).disabledColor,
+                fontSize: 16,
               ),
             ),
-        ],
+          ],
+        ),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _fetchExpenses,
+      child: ListView.separated(
+        padding: const EdgeInsets.only(bottom: 24),
+        itemCount: rows.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, i) => _buildExpenseCard(rows[i], t),
       ),
     );
   }
@@ -189,15 +237,52 @@ class _ExpenseListSheetState extends State<ExpenseListSheet> {
     final double? qty = rawQty is num ? rawQty.toDouble() : double.tryParse(rawQty?.toString() ?? '');
     final double? ratePerL = (qty != null && qty > 0) ? amount / qty : null;
 
-    final createdBy = expense['created_by_name'] ?? 'Driver';
-    final createdById = expense['created_by'];
-    final driverId = expense['driver_id'];
-    
-    // Allow delete if created by this user ID OR matched by driver ID
-    final canDelete = _currentDriverId != null && (
-        (createdById != null && createdById == _currentDriverId) || 
-        (driverId != null && driverId == _currentDriverId)
-    );
+    final createdBy = expense['created_by_name'] ?? t.t('source_manual') ?? 'Driver';
+    // Trust the server's deletable flag (only true for source='manual' entries
+    // logged by THIS driver). Falls back to the legacy client-side check when
+    // the server hasn't been redeployed yet.
+    final canDelete = (expense['deletable'] == true)
+        || (_currentDriverId != null
+            && expense['source'] == 'manual'
+            && expense['driver_id'] != null
+            && expense['driver_id'] == _currentDriverId);
+
+    // Source pill — localized.
+    final source = (expense['source'] ?? 'manual').toString();
+    final category = (expense['category'] ?? 'other').toString();
+    String sourceLabel;
+    Color sourceColor;
+    switch (source) {
+      case 'card':
+        sourceLabel = t.t('source_card') ?? 'Card';
+        sourceColor = const Color(0xFFEF4444);
+        break;
+      case 'wallet':
+        sourceLabel = t.t('source_wallet') ?? 'FASTag';
+        sourceColor = const Color(0xFF8B5CF6);
+        break;
+      case 'parivahan':
+        sourceLabel = t.t('source_parivahan') ?? 'Parivahan';
+        sourceColor = const Color(0xFFF59E0B);
+        break;
+      case 'manual':
+      default:
+        sourceLabel = t.t('source_manual') ?? 'Manual';
+        sourceColor = AppColors.primary;
+    }
+
+    // Category icon (rendered alongside the title for quick scanning).
+    IconData categoryIcon;
+    switch (category) {
+      case 'fuel':
+        categoryIcon = Icons.local_gas_station;
+        break;
+      case 'fastag':
+        categoryIcon = Icons.toll;
+        break;
+      default:
+        categoryIcon = Icons.receipt_long_outlined;
+    }
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -220,12 +305,39 @@ class _ExpenseListSheetState extends State<ExpenseListSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      displayType,
-                      style: AppTextStyles.header.copyWith(
-                        fontSize: 16,
-                        color: Theme.of(context).textTheme.bodyLarge?.color,
-                      ),
+                    Row(
+                      children: [
+                        Icon(categoryIcon, size: 16, color: sourceColor),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            displayType,
+                            style: AppTextStyles.header.copyWith(
+                              fontSize: 16,
+                              color: Theme.of(context).textTheme.bodyLarge?.color,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: sourceColor.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: sourceColor.withOpacity(0.3), width: 0.8),
+                          ),
+                          child: Text(
+                            sourceLabel,
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.4,
+                              color: sourceColor,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -281,13 +393,13 @@ class _ExpenseListSheetState extends State<ExpenseListSheet> {
                 Icon(Icons.local_gas_station, size: 16, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6)),
                 const SizedBox(width: 8),
                 Text(
-                  '${qty.toStringAsFixed(1)} L',
+                  '${qty.toStringAsFixed(1)} ${t.t('unit_litre_short') ?? 'L'}',
                   style: AppTextStyles.body.copyWith(fontSize: 13, color: Theme.of(context).textTheme.bodyMedium?.color),
                 ),
                 if (ratePerL != null) ...[
                   const SizedBox(width: 12),
                   Text(
-                    '@ ₹${ratePerL.toStringAsFixed(2)}/L',
+                    '@ ₹${ratePerL.toStringAsFixed(2)}/${t.t('unit_litre_short') ?? 'L'}',
                     style: AppTextStyles.label.copyWith(fontSize: 12, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6)),
                   ),
                 ],
@@ -394,9 +506,9 @@ class _ExpenseListSheetState extends State<ExpenseListSheet> {
                                       children: [
                                         const Icon(Icons.broken_image, size: 40, color: Colors.grey),
                                         const SizedBox(height: 10),
-                                        Text('Failed to load image', style: TextStyle(color: Colors.black)),
+                                        Text(t.t('failed_load_image') ?? 'Failed to load image', style: const TextStyle(color: Colors.black)),
                                         const SizedBox(height: 4),
-                                        Text('Error: $error', style: TextStyle(color: Colors.black, fontSize: 10)),
+                                        Text('${t.t('error_label') ?? 'Error'}: $error', style: const TextStyle(color: Colors.black, fontSize: 10)),
                                       ],
                                     ),
                                   );
@@ -515,7 +627,7 @@ class _ExpenseListSheetState extends State<ExpenseListSheet> {
               } else {
                  if (mounted) {
                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Failed to delete expense')),
+                      SnackBar(content: Text(t.t('failed_delete_expense') ?? 'Failed to delete expense')),
                    );
                    setState(() => _isLoading = false);
                  }

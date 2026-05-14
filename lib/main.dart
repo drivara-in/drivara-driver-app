@@ -1,4 +1,5 @@
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -24,13 +25,22 @@ void main() async {
   // Strict environment loading (Default: .env)
   const envFile = String.fromEnvironment('ENV_FILE', defaultValue: '.env');
 
+  bool envLoaded = false;
   try {
     await dotenv.load(fileName: envFile);
-    debugPrint("Loaded $envFile");
+    envLoaded = true;
+    debugPrint('[ENV] Loaded $envFile (API_BASE_URL=${dotenv.env['API_BASE_URL']})');
   } catch (e) {
-    debugPrint("Failed to load $envFile: $e");
-    // Optionally rethrow if you want the app to crash on missing config
-    // throw e;
+    debugPrint('[ENV] FAILED to load $envFile: $e — ApiConfig will use compile fallback');
+  }
+  // If we asked for a dev/prod env file but got nothing, retry plain `.env`
+  // as a last resort. This handles the "user added a new native plugin and
+  // hot-restarted; asset bundle stale" case more gracefully.
+  if (!envLoaded && envFile != '.env') {
+    try {
+      await dotenv.load(fileName: '.env');
+      debugPrint('[ENV] Fell back to .env (API_BASE_URL=${dotenv.env['API_BASE_URL']})');
+    } catch (_) { /* both failed; fallback in ApiConfig handles it */ }
   }
 
   await initializeDateFormatting();
@@ -58,22 +68,49 @@ void main() async {
   );
 }
 
-class DrivaraApp extends StatelessWidget {
+class DrivaraApp extends StatefulWidget {
   final String initialRoute;
   const DrivaraApp({super.key, required this.initialRoute});
+
+  @override
+  State<DrivaraApp> createState() => _DrivaraAppState();
+}
+
+class _DrivaraAppState extends State<DrivaraApp> {
+  static final GlobalKey<NavigatorState> _navigatorKey =
+      GlobalKey<NavigatorState>();
+  StreamSubscription<dynamic>? _notificationTapSub;
+
+  @override
+  void initState() {
+    super.initState();
+    // Listen for notification taps (FCM → user tapped). When the user taps a
+    // fuel-proximity or separation alert while the app is backgrounded or
+    // terminated, route them to the active job page.
+    _notificationTapSub = MessagingService().onNotificationTapped.listen((_) {
+      _navigatorKey.currentState?.pushNamedAndRemoveUntil('/home', (route) => false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _notificationTapSub?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     // Watch ThemeProvider to rebuild when theme changes manually
     final themeProvider = Provider.of<ThemeProvider>(context);
-    
+
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'Drivara Driver',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeProvider.themeMode,
-      initialRoute: initialRoute,
+      initialRoute: widget.initialRoute,
       routes: {
         '/login': (context) => const LoginPage(),
         '/permissions': (context) => const PermissionsPage(),
