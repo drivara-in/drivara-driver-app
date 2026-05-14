@@ -18,9 +18,7 @@ class _PermissionsPageState extends State<PermissionsPage> {
   // Track status of critical permissions
   PermissionStatus _locationStatus = PermissionStatus.denied;
   PermissionStatus _contactsStatus = PermissionStatus.denied;
-  PermissionStatus _smsStatus = PermissionStatus.denied;
-  PermissionStatus _callLogStatus = PermissionStatus.denied;
-  
+
   bool _isLoading = false;
 
   @override
@@ -32,60 +30,91 @@ class _PermissionsPageState extends State<PermissionsPage> {
   Future<void> _checkPermissions() async {
     final location = await Permission.location.status;
     final contacts = await Permission.contacts.status;
-    final sms = await Permission.sms.status;
-    final callLog = await Permission.phone.status; // Using phone/call logs group usually
 
     setState(() {
       _locationStatus = location;
       _contactsStatus = contacts;
-      _smsStatus = sms;
-      _callLogStatus = callLog;
     });
+  }
+
+  /// Prominent in-app disclosure for background location. Google Play
+  /// Location Policy requires this dialog to appear BEFORE the OS
+  /// `ACCESS_BACKGROUND_LOCATION` prompt, and to:
+  ///   • name the specific feature using background location,
+  ///   • state that data is collected while the app is backgrounded,
+  ///   • mention the persistent foreground notification,
+  ///   • give the user a clear Continue / Not now choice.
+  /// Submission gets rejected otherwise.
+  Future<bool> _showBackgroundLocationDisclosure() async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Allow background location?'),
+        content: const Text(
+          'Drivara needs background location to:\n\n'
+          '• Alert you if you walk more than 5 km away from your assigned vehicle '
+          '(driver-vehicle separation safety alert).\n'
+          '• Chime when you are within 2 km of a planned fuel stop so you do not '
+          'overshoot a pre-paid pump.\n\n'
+          'Location is collected while the app is in the background during an '
+          'active trip. A persistent notification titled "Drivara — Monitoring '
+          'distance from your assigned vehicle" will appear whenever background '
+          'location is in use.\n\n'
+          'On the next screen, please tap "Allow all the time".',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
   }
 
   Future<void> _requestAllPermissions() async {
     final t = Provider.of<LocalizationProvider>(context, listen: false);
     setState(() => _isLoading = true);
 
-    // Request permissions
-    // Note: Android 11+ might require multiple steps for background location
-    // We start with foreground location, then background if needed.
-    
-    Map<Permission, PermissionStatus> statuses = await [
+    // Foreground permissions first. Background location is requested separately
+    // after the prominent disclosure dialog, per Google Play policy.
+    final Map<Permission, PermissionStatus> statuses = await [
       Permission.location,
       Permission.contacts,
-      Permission.sms, // Careful: Google Play strict policy
-      Permission.phone, // For Call logs
     ].request();
 
-    // Check results
-    if (mounted) {
-        setState(() {
-            _locationStatus = statuses[Permission.location] ?? PermissionStatus.denied;
-            _contactsStatus = statuses[Permission.contacts] ?? PermissionStatus.denied;
-            _smsStatus = statuses[Permission.sms] ?? PermissionStatus.denied;
-            _callLogStatus = statuses[Permission.phone] ?? PermissionStatus.denied;
-            _isLoading = false;
-        });
+    if (!mounted) return;
+    setState(() {
+      _locationStatus = statuses[Permission.location] ?? PermissionStatus.denied;
+      _contactsStatus = statuses[Permission.contacts] ?? PermissionStatus.denied;
+      _isLoading = false;
+    });
 
-        // Simple logic: if at least location is granted, proceed
-        // In a real app, you might block until all critical ones are granted.
-        if (_locationStatus.isGranted) {
-             // Try to request background location separately for Android 10+
-             if (await Permission.locationAlways.isDenied) {
-                // Ideally show a dialog explaining why
-                await Permission.locationAlways.request();
-             }
-             
-             Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const HomePage()),
-             );
-        } else {
-             ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(t.t('perm_required_message'))),
-             );
-        }
+    if (!_locationStatus.isGranted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t.t('perm_required_message'))),
+      );
+      return;
     }
+
+    // Foreground granted → show prominent disclosure for background location.
+    if (await Permission.locationAlways.isDenied) {
+      final accepted = await _showBackgroundLocationDisclosure();
+      if (accepted) {
+        await Permission.locationAlways.request();
+      }
+    }
+
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const HomePage()),
+    );
   }
 
   @override
@@ -135,20 +164,6 @@ class _PermissionsPageState extends State<PermissionsPage> {
                       description: t.t('perm_contacts_desc'),
                       isGranted: _contactsStatus.isGranted,
                       delay: 400.ms,
-                    ),
-                    _PermissionItem(
-                      icon: Icons.sms,
-                      title: t.t('perm_sms_title'),
-                      description: t.t('perm_sms_desc'),
-                      isGranted: _smsStatus.isGranted,
-                      delay: 500.ms,
-                    ),
-                    _PermissionItem(
-                      icon: Icons.phone_in_talk,
-                      title: t.t('perm_call_log_title'),
-                      description: t.t('perm_call_log_desc'),
-                      isGranted: _callLogStatus.isGranted,
-                      delay: 600.ms,
                     ),
                   ],
                 ),
