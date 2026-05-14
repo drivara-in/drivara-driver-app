@@ -52,11 +52,8 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
 
       if (response.data is Map && response.data['ok'] == true) {
-         // Dev fallback: server returns devOtp when DEV_LOG_OTP=true so login
-         // works even when WhatsApp delivery is silently dropped.
-         final devOtp = response.data['devOtp']?.toString();
          Navigator.of(context).push(
-           MaterialPageRoute(builder: (_) => OtpPage(phone: phone, devOtp: devOtp)),
+           MaterialPageRoute(builder: (_) => OtpPage(phone: phone)),
          );
       } else {
          final msg = (response.data is Map) ? response.data['message'] : "Unexpected response from server";

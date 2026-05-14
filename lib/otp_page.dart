@@ -1,7 +1,5 @@
 import 'dart:async' show unawaited;
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:dio/dio.dart';
 import 'package:pinput/pinput.dart';
 import 'package:smart_auth/smart_auth.dart';
@@ -15,8 +13,7 @@ import 'providers/localization_provider.dart';
 
 class OtpPage extends StatefulWidget {
   final String phone;
-  final String? devOtp;
-  const OtpPage({super.key, required this.phone, this.devOtp});
+  const OtpPage({super.key, required this.phone});
 
   @override
   State<OtpPage> createState() => _OtpPageState();
@@ -172,40 +169,6 @@ class _OtpPageState extends State<OtpPage> {
             ),
             const SizedBox(height: 48),
 
-            if (widget.devOtp != null) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade100,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.amber.shade300),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.bug_report, size: 18, color: Colors.amber),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Dev OTP: ${widget.devOtp}',
-                        style: const TextStyle(
-                          fontFamily: 'monospace',
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () =>
-                          _otpController.setText(widget.devOtp ?? ''),
-                      child: const Text('Use'),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
             Pinput(
               autofillHints: const [AutofillHints.oneTimeCode],
               controller: _otpController,
