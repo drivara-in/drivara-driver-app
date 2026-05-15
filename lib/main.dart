@@ -45,17 +45,25 @@ void main() async {
 
   await initializeDateFormatting();
 
-  // Local-notification plugin (used both by FCM foreground handler and
-  // existing reminder logic). FCM init is idempotent — safe if already set up.
-  await NotificationService().init();
-  await MessagingService().init();
+  // CRITICAL: Do NOT await Firebase / FCM init before runApp(). On slow or
+  // packet-lossy mobile networks the Firebase platform-channel handshake
+  // (and the Android 13 notification permission dialog it triggers under
+  // the hood) can sit for tens of seconds, which freezes the launcher
+  // splash because the Flutter engine never paints its first frame. Fire
+  // these off without awaiting; their side effects (token registration,
+  // foreground notification listeners) settle while the user is already
+  // looking at a real screen.
+  unawaited(NotificationService().init());
+  unawaited(MessagingService().init().then((_) {
+    // Best-effort FCM re-registration when init resolves. The
+    // registerAfterLogin call below depends on init being done, so we
+    // chain it here instead of running it in parallel.
+  }));
 
   final token = await ApiConfig.getAuthToken();
-  // If a user is already logged in (app relaunch), refresh the FCM token
-  // so server-side has the current one even if it rotated while app was closed.
   if (token != null) {
-    // Fire-and-forget; doesn't block UI.
-    MessagingService().registerAfterLogin();
+    // Fire-and-forget; doesn't block UI. Internally awaits init().
+    unawaited(MessagingService().registerAfterLogin());
   }
   runApp(
     MultiProvider(

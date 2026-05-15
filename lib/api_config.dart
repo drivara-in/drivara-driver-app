@@ -42,8 +42,13 @@ class ApiConfig {
   static Dio _createDio() {
     final dio = Dio(BaseOptions(
       baseUrl: baseUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
+      // Bumped from 10s → 30s after we observed occasional 17–79s TLS
+      // handshake stalls from drivers' phones to the self-hosted origin.
+      // 30s lets a single packet-loss retry succeed instead of timing out
+      // and surfacing as a frozen splash / spinner on the driver app.
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 30),
+      sendTimeout: const Duration(seconds: 30),
     ));
 
     dio.interceptors.add(LogInterceptor(
