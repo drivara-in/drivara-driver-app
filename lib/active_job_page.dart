@@ -670,6 +670,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     final pLng = double.tryParse((next['lng']).toString()) ?? 0.0;
     if (pLat == 0 && pLng == 0) return;
 
+    final prevKm = _fuelProxKm;
     final km = _getHaversineDistance(vLat, vLng, pLat, pLng);
     _fuelProxKm = km;
     _fuelProxStop = next;
@@ -684,6 +685,15 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
       // Driver moved past the pump or it was swapped — clear so a future
       // pump in the plan can re-trigger if they come within 2 km.
       _fuelProxAlertedKey = null;
+      // Server's auto-skip worker fires within 90s after a planned pump
+      // is passed by >=5km. Trigger an immediate dashboard refresh so the
+      // orange marker for the now-skipped pump disappears from the map
+      // (and the Next Refuel card switches to the next planned stop)
+      // within one HTTP round-trip instead of waiting up to 30s for the
+      // next poll tick.
+      if (prevKm != null && prevKm <= 5.0) {
+        unawaited(_fetchDashboardData());
+      }
     }
   }
 
