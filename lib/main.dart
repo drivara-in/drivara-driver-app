@@ -47,27 +47,26 @@ void main() async {
 
   final token = await ApiConfig.getAuthToken();
 
-  // CRITICAL: defer Firebase / FCM init until AFTER the first frame paints.
-  // FirebaseMessaging.requestPermission() shows the Android 13+
-  // POST_NOTIFICATIONS dialog, which pauses the Activity. If that happens
-  // before runApp's first frame, the launcher splash drawable is never
-  // swapped for the Flutter view — user taps Allow, the dialog dismisses,
-  // and they're stuck looking at the static splash because Flutter never
-  // got to paint frame 1. Scheduling on the post-frame callback guarantees
-  // the login / home screen is rendered first; the permission dialog then
-  // appears on top of it, and dismissing it returns the user to the real
-  // app, not to the splash.
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    unawaited(NotificationService().init());
-    unawaited(MessagingService().init().then((_) {
-      if (token != null) {
-        // Re-register FCM token now that init has settled. Pre-1.0.13 this
-        // happened in parallel with init() and occasionally raced.
-        return MessagingService().registerAfterLogin();
-      }
-      return null;
-    }));
-  });
+  // NotificationService is local-only (flutter_local_notifications plugin)
+  // — safe to init at startup. It does NOT show any permission dialogs;
+  // FCM is what triggers POST_NOTIFICATIONS prompts.
+  unawaited(NotificationService().init());
+
+  // CRITICAL: do NOT call MessagingService().init() here. It awaits
+  // FirebaseMessaging.requestPermission(), which on Android 13+ shows
+  // the POST_NOTIFICATIONS system dialog. On a fresh Play Store install
+  // that dialog pauses the Activity before the Flutter engine has handed
+  // off the native splash drawable, and the app gets stuck on the splash
+  // forever after the user taps Allow. Firebase init is now triggered
+  // lazily by MessagingService().registerAfterLogin(), which runs from
+  // the OTP success path (OtpPage._verifyOtp) — i.e., AFTER the user has
+  // typed their phone, received an OTP, entered it, and seen the dashboard
+  // start to load. At that point the splash handoff is long done and a
+  // permission prompt is harmless. This also matches Android UX guidance:
+  // don't prompt for runtime permissions before the user has context.
+  if (token != null) {
+    unawaited(MessagingService().registerAfterLogin());
+  }
 
   runApp(
     MultiProvider(
