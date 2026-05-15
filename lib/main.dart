@@ -45,26 +45,30 @@ void main() async {
 
   await initializeDateFormatting();
 
-  // CRITICAL: Do NOT await Firebase / FCM init before runApp(). On slow or
-  // packet-lossy mobile networks the Firebase platform-channel handshake
-  // (and the Android 13 notification permission dialog it triggers under
-  // the hood) can sit for tens of seconds, which freezes the launcher
-  // splash because the Flutter engine never paints its first frame. Fire
-  // these off without awaiting; their side effects (token registration,
-  // foreground notification listeners) settle while the user is already
-  // looking at a real screen.
-  unawaited(NotificationService().init());
-  unawaited(MessagingService().init().then((_) {
-    // Best-effort FCM re-registration when init resolves. The
-    // registerAfterLogin call below depends on init being done, so we
-    // chain it here instead of running it in parallel.
-  }));
-
   final token = await ApiConfig.getAuthToken();
-  if (token != null) {
-    // Fire-and-forget; doesn't block UI. Internally awaits init().
-    unawaited(MessagingService().registerAfterLogin());
-  }
+
+  // CRITICAL: defer Firebase / FCM init until AFTER the first frame paints.
+  // FirebaseMessaging.requestPermission() shows the Android 13+
+  // POST_NOTIFICATIONS dialog, which pauses the Activity. If that happens
+  // before runApp's first frame, the launcher splash drawable is never
+  // swapped for the Flutter view — user taps Allow, the dialog dismisses,
+  // and they're stuck looking at the static splash because Flutter never
+  // got to paint frame 1. Scheduling on the post-frame callback guarantees
+  // the login / home screen is rendered first; the permission dialog then
+  // appears on top of it, and dismissing it returns the user to the real
+  // app, not to the splash.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(NotificationService().init());
+    unawaited(MessagingService().init().then((_) {
+      if (token != null) {
+        // Re-register FCM token now that init has settled. Pre-1.0.13 this
+        // happened in parallel with init() and occasionally raced.
+        return MessagingService().registerAfterLogin();
+      }
+      return null;
+    }));
+  });
+
   runApp(
     MultiProvider(
       providers: [
