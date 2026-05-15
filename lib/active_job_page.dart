@@ -2457,12 +2457,25 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     final outletName = (next['outletName'] ?? 'Fuel Stop').toString();
     final outletAddress = (next['outletAddress'] ?? '').toString();
     final state = (next['state'] ?? '').toString();
-    final distanceKm = (_parseNum(next['distanceFromStartKm']) ?? 0).toDouble();
     final fillLiters = (_parseNum(next['fillLiters']) ?? 0).toDouble();
     final pricePerLiter = (_parseNum(next['pricePerLiter']) ?? 0).toDouble();
     final fillCostInr = (_parseNum(next['fillCostInr']) ?? 0).toDouble();
     final lat = (_parseNum(next['lat']) ?? 0).toDouble();
     final lng = (_parseNum(next['lng']) ?? 0).toDouble();
+    // Live distance: current vehicle position → pump (haversine). Falls
+    // back to the server-computed distanceFromStartKm (static, set at
+    // route-plan time) only when telemetry hasn't arrived yet. Never uses
+    // the driver's phone GPS — the truck is what we're refuelling, not the
+    // phone.
+    double distanceKm = (_parseNum(next['distanceFromStartKm']) ?? 0).toDouble();
+    final vLoc = _dashboardData?['vehicle']?['location'];
+    if (vLoc != null && lat != 0 && lng != 0) {
+      final vLat = double.tryParse(vLoc['lat'].toString()) ?? 0.0;
+      final vLng = double.tryParse(vLoc['lng'].toString()) ?? 0.0;
+      if (vLat != 0 && vLng != 0) {
+        distanceKm = _getHaversineDistance(vLat, vLng, lat, lng);
+      }
+    }
     final action = (next['action'] ?? 'fill_partial').toString();
     final reason = (next['reason'] ?? '').toString();
     final remainingStops = stops.length > 1 ? stops.length - 1 : 0;
@@ -3010,9 +3023,13 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
   ///  - the vehicle's last known location (from dashboard telemetry),
   ///  - separation > 1 km.
   bool _shouldShowVehicleLocator() {
-    if (_driverPos == null) return false;
+    // Always show the Navigate-to-vehicle banner whenever we know where the
+    // truck is — the driver may need to head to it even before their own
+    // GPS has locked on. The visual is tuned in _buildVehicleLocatorBanner
+    // for 3 zones: missing-driver-gps, 1–5 km (normal), >5 km (urgent).
     final v = _vehicleLatLng();
     if (v == null) return false;
+    if (_driverPos == null) return true;
     final km = _getHaversineDistance(_driverPos!.latitude, _driverPos!.longitude, v[0], v[1]);
     return km > 1.0;
   }
@@ -3034,27 +3051,33 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
   Widget _buildVehicleLocatorBanner() {
     final t = Provider.of<LocalizationProvider>(context, listen: false);
     final v = _vehicleLatLng();
-    if (v == null || _driverPos == null) return const SizedBox.shrink();
-    final km = _getHaversineDistance(_driverPos!.latitude, _driverPos!.longitude, v[0], v[1]);
-    final distLabel = km < 10
-        ? '${km.toStringAsFixed(1)} ${t.t('unit_km') ?? 'km'}'
-        : '${km.toStringAsFixed(0)} ${t.t('unit_km') ?? 'km'}';
+    if (v == null) return const SizedBox.shrink();
+    final km = _driverPos == null
+        ? null
+        : _getHaversineDistance(_driverPos!.latitude, _driverPos!.longitude, v[0], v[1]);
+    final distLabel = km == null
+        ? '—'
+        : (km < 10
+            ? '${km.toStringAsFixed(1)} ${t.t('unit_km') ?? 'km'}'
+            : '${km.toStringAsFixed(0)} ${t.t('unit_km') ?? 'km'}');
     final reg = (_dashboardData?['vehicle']?['registration_number']
             ?? _job['vehicle_registration']
             ?? _job['vehicle_name']
             ?? t.t('vehicle_locator_title') ?? 'Vehicle')
         .toString();
+    final isFar = km != null && km > 5.0;
+    final accent = isFar ? const Color(0xFFEF4444) : AppColors.primary;
 
     return Material(
       color: Colors.transparent,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: AppColors.primary,
+          color: accent,
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: AppColors.primary.withOpacity(0.30),
+              color: accent.withOpacity(0.30),
               blurRadius: 14,
               offset: const Offset(0, 4),
             ),
@@ -3078,7 +3101,9 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    (t.t('vehicle_away_label') ?? 'VEHICLE LOCATION'),
+                    isFar
+                        ? (t.t('vehicle_far_label') ?? 'WALKED TOO FAR FROM TRUCK')
+                        : (t.t('vehicle_away_label') ?? 'VEHICLE LOCATION'),
                     style: GoogleFonts.inter(
                       fontSize: 10,
                       fontWeight: FontWeight.w800,
@@ -3088,7 +3113,9 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '$reg · $distLabel ${t.t('away_suffix') ?? 'away'}',
+                    km == null
+                        ? '$reg · ${t.t('vehicle_locator_subtitle') ?? 'Tap Navigate to head to it'}'
+                        : '$reg · $distLabel ${t.t('away_suffix') ?? 'away'}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.inter(
@@ -3107,7 +3134,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
               label: Text(t.t('action_navigate') ?? 'Navigate'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
-                foregroundColor: AppColors.primary,
+                foregroundColor: accent,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
