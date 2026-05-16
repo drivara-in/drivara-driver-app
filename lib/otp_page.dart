@@ -5,6 +5,7 @@ import 'package:pinput/pinput.dart';
 import 'package:smart_auth/smart_auth.dart';
 import 'api_config.dart';
 import 'services/messaging_service.dart';
+import 'services/notification_service.dart';
 import 'active_job_page.dart';
 import 'no_job_page.dart';
 import 'theme/app_theme.dart';
@@ -79,11 +80,25 @@ class _OtpPageState extends State<OtpPage> {
            }
         }
 
-        // 2. Register FCM token with the backend (fire-and-forget; doesn't
-        //    block navigation if push isn't configured on this device).
+        // 2. Now that the OTP screen is painted and the user has just
+        //    interacted with the app, it's safe to ask for the Android
+        //    13+ POST_NOTIFICATIONS permission. We deliberately didn't
+        //    ask at startup because that pauses the Activity before the
+        //    Flutter splash → view handoff completes, leaving the app
+        //    stuck on the launcher splash forever on fresh Play Store
+        //    installs. Both NotificationService (local) and FCM use the
+        //    same OS permission, so we trigger it once here.
+        unawaited(NotificationService().requestPermission());
+
+        // 3. Register FCM token with the backend. registerAfterLogin
+        //    internally calls MessagingService.init() which fires the FCM
+        //    permission prompt too — but since the OS already prompted
+        //    above and the user answered, this returns the cached result
+        //    instead of re-prompting. Fire-and-forget; doesn't block
+        //    navigation if push isn't configured on this device.
         unawaited(MessagingService().registerAfterLogin());
 
-        // 3. Fetch Active Job
+        // 4. Fetch Active Job
         await _checkActiveJob();
       } else {
         setState(() => _error = response.data['message'] ?? Provider.of<LocalizationProvider>(context, listen: false).t('verification_failed'));

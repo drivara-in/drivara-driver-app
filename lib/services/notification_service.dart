@@ -28,11 +28,28 @@ class NotificationService {
          debugPrint('Notification tapped: ${response.payload}');
       },
     );
-    
-    // Request permissions (Android 13+)
-    await flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
+    // Permission is NOT requested here. On Android 13+ that triggers the
+    // POST_NOTIFICATIONS system dialog, which on a fresh Play Store install
+    // pauses the Activity before the Flutter engine has handed off the
+    // native splash drawable to the first frame — so the user taps Allow,
+    // the dialog dismisses, and the app stays stuck on the splash forever.
+    // requestPermission() below is now called from a screen post-OTP,
+    // when the Flutter view is already painted and an OS prompt is safe.
+  }
+
+  /// Request POST_NOTIFICATIONS permission. Call only AFTER the first
+  /// Flutter frame has painted (i.e., user is on Login or any post-OTP
+  /// screen). Safe to call multiple times — the plugin no-ops if already
+  /// granted or denied.
+  Future<bool?> requestPermission() async {
+    try {
+      return await flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestNotificationsPermission();
+    } catch (e) {
+      debugPrint('[notification] requestPermission failed: $e');
+      return null;
+    }
   }
 
   Future<void> showNotification({
