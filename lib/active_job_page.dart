@@ -23,6 +23,7 @@ import 'package:drivara_driver_app/services/behavior_service.dart';
 import 'package:drivara_driver_app/services/separation_service.dart';
 import 'package:drivara_driver_app/services/messaging_service.dart';
 import 'package:drivara_driver_app/pages/tyre_management_page.dart';
+import 'package:drivara_driver_app/pages/loans_page.dart';
 import 'leaderboard_page.dart';
 import 'api_config.dart';
 import 'providers/localization_provider.dart';
@@ -93,6 +94,12 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
   bool _stoppageReasonRequested = false;
   String? _activeStoppageId;
   bool _stoppageSheetShowing = false;
+
+  // Loans-menu visibility — only the conditional show/hide flag for the FAB
+  // in the action column. The full loan list is fetched inside LoansPage
+  // itself when the driver taps the tile. Fetched once on init; a loan
+  // disbursed mid-session shows up on the next app launch, which is fine.
+  bool _hasLoans = false;
   List<Map<String, dynamic>>? _stoppageReasons; // Fetched from API
 
   JobStreamService? _streamService; // Retained as it's used in _connectStream
@@ -248,6 +255,20 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
       _fetchDashboardData();
       _startPolling();
       _fetchStoppageReasons();
+      _fetchLoansVisibility();
+  }
+
+  Future<void> _fetchLoansVisibility() async {
+    try {
+      final res = await ApiConfig.dio.get('/driver/me/loans');
+      final list = res.data;
+      if (mounted && list is List) {
+        setState(() => _hasLoans = list.isNotEmpty);
+      }
+    } catch (e) {
+      // Don't block UX on a loans-menu lookup failure; just leave hidden.
+      debugPrint('[loans] visibility check failed: $e');
+    }
   }
 
   Future<void> _fetchStoppageReasons() async {
@@ -1611,6 +1632,21 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                         child: const Icon(Icons.local_shipping, color: Colors.white),
                    ),
 
+                   // 7. Loans (hidden when the driver has none — visibility
+                   // is decided by _fetchLoansVisibility() on initial load).
+                   if (_hasLoans) ...[
+                     const SizedBox(height: 12),
+                     FloatingActionButton(
+                       heroTag: "loansBtn",
+                       onPressed: () {
+                         Navigator.push(context, MaterialPageRoute(builder: (_) => const LoansPage()));
+                       },
+                       mini: true,
+                       backgroundColor: Colors.indigo,
+                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                       child: const Icon(Icons.account_balance, color: Colors.white),
+                     ),
+                   ],
 
                 ],
               ),
