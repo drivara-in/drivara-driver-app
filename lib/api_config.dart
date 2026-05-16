@@ -91,13 +91,32 @@ class ApiConfig {
   }
 
   static Future<String?> getAuthToken() async {
-    final token = await _storage.read(key: 'auth_token');
+    String? token;
+    try {
+      token = await _storage.read(key: 'auth_token');
+    } catch (e) {
+      // On Play Store, reinstalls across different signing certs (upload key
+      // vs Play App Signing key) leave SharedPreferences restored via Android
+      // Auto Backup but the matching Android Keystore key is gone. Reads then
+      // throw javax.crypto.BadPaddingException: BAD_DECRYPT and, before this
+      // catch existed, that exception bubbled up through main() — runApp()
+      // never ran and the app hung on the launcher splash forever. Treat the
+      // store as corrupt, wipe it, and proceed unauthenticated.
+      debugPrint('[ApiConfig] secure storage read failed ($e) — wiping and treating as logged-out');
+      try { await _storage.deleteAll(); } catch (_) {}
+      return null;
+    }
     if (token != null) {
       _dio.options.headers['Authorization'] = 'Bearer $token';
 
       // 1. Try storage
-      String? orgId = await _storage.read(key: 'org_id');
-      
+      String? orgId;
+      try {
+        orgId = await _storage.read(key: 'org_id');
+      } catch (_) {
+        orgId = null;
+      }
+
       // 2. Fallback: Extract from Token
       if (orgId == null) {
          try {
@@ -105,10 +124,10 @@ class ApiConfig {
              final decoded = JwtDecoder.decode(token);
              // Check both camelCase and snake_case
              orgId = decoded['orgId'] ?? decoded['org_id'];
-             
+
              if (orgId != null) {
                 // Persist for future
-                await _storage.write(key: 'org_id', value: orgId);
+                try { await _storage.write(key: 'org_id', value: orgId); } catch (_) {}
              }
            }
          } catch (e) {
