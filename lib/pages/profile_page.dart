@@ -117,7 +117,8 @@ class _ProfilePageState extends State<ProfilePage> {
     final license = (p['license'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
     final vehicle = (p['active_vehicle'] as Map?)?.cast<String, dynamic>();
     final loans = (p['loans_summary'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
-    final loanCount = (loans['active_count'] as num?)?.toInt() ?? 0;
+    final loanTotalCount = (loans['total_count'] as num?)?.toInt() ?? 0;
+    final loanActiveCount = (loans['active_count'] as num?)?.toInt() ?? 0;
     final loanOutstanding = (loans['outstanding_total'] as num?)?.toDouble() ?? 0;
 
     return ListView(
@@ -140,15 +141,21 @@ class _ProfilePageState extends State<ProfilePage> {
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EarningsPage())),
           ),
         ),
-        if (loanCount > 0) ...[
+        if (loanTotalCount > 0) ...[
           const SizedBox(height: 8),
           Card(
             child: ListTile(
               leading: const Icon(Icons.account_balance),
-              title: Text('$loanCount active loan${loanCount == 1 ? '' : 's'}',
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              title: Text(
+                loanActiveCount > 0
+                    ? '$loanActiveCount active loan${loanActiveCount == 1 ? '' : 's'}'
+                    : '$loanTotalCount loan${loanTotalCount == 1 ? '' : 's'}',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
               subtitle: Text(
-                'Outstanding: ${NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(loanOutstanding)}',
+                loanActiveCount > 0
+                    ? 'Outstanding: ${NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(loanOutstanding)}'
+                    : 'View history',
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LoansPage())),
