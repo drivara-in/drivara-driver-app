@@ -5,9 +5,9 @@ import 'package:dio/dio.dart';
 enum LeaderboardPeriod { week, month, all }
 
 class LeaderboardViolations {
-  final int speed;    // speed-only events (over 80 km/h, RPM normal)
-  final int rpm;      // RPM-only events (over 2400 rpm, speed normal)
-  final int impact;   // both speed AND RPM at the same instant — hardest driving
+  final int speed;    // speed-only events (over the vehicle's own speed limit, RPM normal)
+  final int rpm;      // RPM-only events (over the vehicle's own RPM limit, speed normal)
+  final int impact;   // both speed AND RPM over limit at the same instant — hardest driving
   final int harsh;    // brake / accel / sharp turn / cornering from phone sensors
   const LeaderboardViolations({
     required this.speed,
