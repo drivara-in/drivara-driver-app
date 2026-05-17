@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:drivara_driver_app/api_config.dart';
 import 'package:drivara_driver_app/login_page.dart';
 import 'package:drivara_driver_app/services/messaging_service.dart';
+import 'package:drivara_driver_app/providers/localization_provider.dart';
 import 'package:drivara_driver_app/pages/loans_page.dart';
 import 'package:drivara_driver_app/pages/earnings_page.dart';
 
@@ -63,25 +65,27 @@ class _ProfilePageState extends State<ProfilePage> {
         _loading = false;
       });
     } catch (e) {
+      final t = mounted ? Provider.of<LocalizationProvider>(context, listen: false) : null;
       setState(() {
-        _error = 'Could not load profile. Pull to retry.';
+        _error = t?.t('profile_load_error') ?? 'Could not load profile. Pull to retry.';
         _loading = false;
       });
     }
   }
 
   Future<void> _confirmAndLogout() async {
+    final t = Provider.of<LocalizationProvider>(context, listen: false);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Log out?'),
-        content: const Text("You'll need to enter your OTP again to sign back in."),
+        title: Text(t.t('profile_logout_title') ?? 'Log out?'),
+        content: Text(t.t('profile_logout_body') ?? "You'll need to enter your OTP again to sign back in."),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(t.t('profile_logout_cancel') ?? 'Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
-            child: const Text('Log out'),
+            child: Text(t.t('profile_logout') ?? 'Log out'),
           ),
         ],
       ),
@@ -98,8 +102,9 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = Provider.of<LocalizationProvider>(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
+      appBar: AppBar(title: Text(t.t('profile_title') ?? 'Profile')),
       body: RefreshIndicator(
         onRefresh: _fetch,
         child: _loading
@@ -107,7 +112,7 @@ class _ProfilePageState extends State<ProfilePage> {
             : _error != null
                 ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Text(_error!))])
                 : _profile == null
-                    ? const Center(child: Text('No data'))
+                    ? Center(child: Text(t.t('profile_no_data') ?? 'No data'))
                     : _buildBody(context, _profile!),
       ),
     );
@@ -132,51 +137,69 @@ class _ProfilePageState extends State<ProfilePage> {
           Center(child: _RCCard(vehicle: vehicle)),
         ],
         const SizedBox(height: 16),
-        Card(
-          child: ListTile(
-            leading: Icon(Icons.payments, color: Colors.green.shade700),
-            title: const Text('My Earnings', style: TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: const Text('Salary from completed trips'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EarningsPage())),
-          ),
-        ),
+        Builder(builder: (ctx) {
+          final t = Provider.of<LocalizationProvider>(ctx, listen: false);
+          return Card(
+            child: ListTile(
+              leading: Icon(Icons.payments, color: Colors.green.shade700),
+              title: Text(t.t('profile_earnings_title') ?? 'My Earnings',
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: Text(t.t('profile_earnings_subtitle') ?? 'Salary from completed trips'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EarningsPage())),
+            ),
+          );
+        }),
         if (loanTotalCount > 0) ...[
           const SizedBox(height: 8),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.account_balance),
-              title: Text(
-                loanActiveCount > 0
-                    ? '$loanActiveCount active loan${loanActiveCount == 1 ? '' : 's'}'
-                    : '$loanTotalCount loan${loanTotalCount == 1 ? '' : 's'}',
-                style: const TextStyle(fontWeight: FontWeight.w600),
+          Builder(builder: (ctx) {
+            final t = Provider.of<LocalizationProvider>(ctx, listen: false);
+            final activeWord = (loanActiveCount == 1
+                    ? t.t('profile_loans_active_one')
+                    : t.t('profile_loans_active')) ??
+                (loanActiveCount == 1 ? 'active loan' : 'active loans');
+            final totalWord = (loanTotalCount == 1
+                    ? t.t('profile_loans_total_one')
+                    : t.t('profile_loans_total')) ??
+                (loanTotalCount == 1 ? 'loan' : 'loans');
+            return Card(
+              child: ListTile(
+                leading: const Icon(Icons.account_balance),
+                title: Text(
+                  loanActiveCount > 0
+                      ? '$loanActiveCount $activeWord'
+                      : '$loanTotalCount $totalWord',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  loanActiveCount > 0
+                      ? '${t.t('profile_loans_outstanding') ?? 'Outstanding'}: ${NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(loanOutstanding)}'
+                      : (t.t('profile_loans_view_history') ?? 'View history'),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LoansPage())),
               ),
-              subtitle: Text(
-                loanActiveCount > 0
-                    ? 'Outstanding: ${NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(loanOutstanding)}'
-                    : 'View history',
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LoansPage())),
-            ),
-          ),
+            );
+          }),
         ],
         const SizedBox(height: 24),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: _confirmAndLogout,
-            icon: Icon(Icons.logout, color: Colors.red.shade700),
-            label: Text('Log out',
-                style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.w600)),
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              side: BorderSide(color: Colors.red.shade300),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        Builder(builder: (ctx) {
+          final t = Provider.of<LocalizationProvider>(ctx, listen: false);
+          return SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _confirmAndLogout,
+              icon: Icon(Icons.logout, color: Colors.red.shade700),
+              label: Text(t.t('profile_logout') ?? 'Log out',
+                  style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.w600)),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                side: BorderSide(color: Colors.red.shade300),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
             ),
-          ),
-        ),
+          );
+        }),
         const SizedBox(height: 24),
       ],
     );
