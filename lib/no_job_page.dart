@@ -18,6 +18,7 @@ class NoJobPage extends StatefulWidget {
 
 class _NoJobPageState extends State<NoJobPage> with WidgetsBindingObserver {
   Timer? _pollTimer;
+  String? _avatarUrl;
 
   @override
   void initState() {
@@ -25,6 +26,17 @@ class _NoJobPageState extends State<NoJobPage> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _checkJob(); // Check immediately on mount
     _startPolling();
+    _fetchProfileAvatar();
+  }
+
+  Future<void> _fetchProfileAvatar() async {
+    try {
+      final res = await ApiConfig.dio.get('/driver/me/profile');
+      final url = (res.data is Map) ? (res.data['avatar_url']?.toString()) : null;
+      if (mounted) setState(() => _avatarUrl = (url != null && url.isNotEmpty) ? url : null);
+    } catch (e) {
+      debugPrint('[profile-avatar] fetch failed: $e');
+    }
   }
 
   @override
@@ -84,7 +96,9 @@ class _NoJobPageState extends State<NoJobPage> with WidgetsBindingObserver {
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.account_circle_outlined),
+            icon: (_avatarUrl != null && _avatarUrl!.isNotEmpty)
+                ? CircleAvatar(radius: 14, backgroundImage: NetworkImage(_avatarUrl!))
+                : const Icon(Icons.account_circle_outlined),
             tooltip: 'Profile',
             onPressed: () {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilePage()));

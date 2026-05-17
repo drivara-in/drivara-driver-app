@@ -23,7 +23,6 @@ import 'package:drivara_driver_app/services/behavior_service.dart';
 import 'package:drivara_driver_app/services/separation_service.dart';
 import 'package:drivara_driver_app/services/messaging_service.dart';
 import 'package:drivara_driver_app/pages/tyre_management_page.dart';
-import 'package:drivara_driver_app/pages/loans_page.dart';
 import 'package:drivara_driver_app/pages/earnings_page.dart';
 import 'package:drivara_driver_app/pages/settlement_sheet.dart';
 import 'package:drivara_driver_app/pages/profile_page.dart';
@@ -98,11 +97,11 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
   String? _activeStoppageId;
   bool _stoppageSheetShowing = false;
 
-  // Loans-menu visibility — only the conditional show/hide flag for the FAB
-  // in the action column. The full loan list is fetched inside LoansPage
-  // itself when the driver taps the tile. Fetched once on init; a loan
-  // disbursed mid-session shows up on the next app launch, which is fine.
-  bool _hasLoans = false;
+  // Driver's avatar URL (if uploaded) — used to render the Profile icon in
+  // the toolbar with the actual driver's photo instead of a generic person
+  // glyph. Fetched once on init via /driver/me/profile; falls back to the
+  // generic icon when null/empty or before the fetch resolves.
+  String? _avatarUrl;
   List<Map<String, dynamic>>? _stoppageReasons; // Fetched from API
 
   JobStreamService? _streamService; // Retained as it's used in _connectStream
@@ -258,19 +257,17 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
       _fetchDashboardData();
       _startPolling();
       _fetchStoppageReasons();
-      _fetchLoansVisibility();
+      _fetchProfileAvatar();
   }
 
-  Future<void> _fetchLoansVisibility() async {
+  Future<void> _fetchProfileAvatar() async {
     try {
-      final res = await ApiConfig.dio.get('/driver/me/loans');
-      final list = res.data;
-      if (mounted && list is List) {
-        setState(() => _hasLoans = list.isNotEmpty);
-      }
+      final res = await ApiConfig.dio.get('/driver/me/profile');
+      final url = (res.data is Map) ? (res.data['avatar_url']?.toString()) : null;
+      if (mounted) setState(() => _avatarUrl = (url != null && url.isNotEmpty) ? url : null);
     } catch (e) {
-      // Don't block UX on a loans-menu lookup failure; just leave hidden.
-      debugPrint('[loans] visibility check failed: $e');
+      // Best-effort — Profile icon falls back to the generic person glyph.
+      debugPrint('[profile-avatar] fetch failed: $e');
     }
   }
 
@@ -1657,23 +1654,11 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                         child: const Icon(Icons.local_shipping, color: Colors.white),
                    ),
 
-                   // 7. Loans (hidden when the driver has none — visibility
-                   // is decided by _fetchLoansVisibility() on initial load).
-                   if (_hasLoans) ...[
-                     const SizedBox(height: 12),
-                     FloatingActionButton(
-                       heroTag: "loansBtn",
-                       onPressed: () {
-                         Navigator.push(context, MaterialPageRoute(builder: (_) => const LoansPage()));
-                       },
-                       mini: true,
-                       backgroundColor: Colors.indigo,
-                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                       child: const Icon(Icons.account_balance, color: Colors.white),
-                     ),
-                   ],
+                   // Loans tile moved into the Profile screen — accessible
+                   // from the Profile icon in the toolbar. Removing the FAB
+                   // here so the action column doesn't repeat the same entry.
 
-                   // 8. Earnings — always visible; the driver should be able
+                   // Earnings — always visible; the driver should be able
                    // to check what they've made over a period at any time.
                    const SizedBox(height: 12),
                    FloatingActionButton(
@@ -2412,10 +2397,16 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                             // Profile takes over from the old Logout icon —
                             // Logout now lives at the bottom of the Profile
                             // page (with a confirm dialog), alongside DL/RC/
-                            // loans visibility. Avoids accidental logouts from
-                            // the toolbar that used to ship next to the theme
-                            // and language buttons.
-                            icon: const Icon(Icons.account_circle_outlined),
+                            // loans visibility. The icon renders the driver's
+                            // avatar when one is uploaded (fetched once on
+                            // init via _fetchProfileAvatar) and falls back to
+                            // a generic person glyph otherwise.
+                            icon: (_avatarUrl != null && _avatarUrl!.isNotEmpty)
+                                ? CircleAvatar(
+                                    radius: 14,
+                                    backgroundImage: NetworkImage(_avatarUrl!),
+                                  )
+                                : const Icon(Icons.account_circle_outlined),
                             color: Theme.of(context).iconTheme.color,
                             tooltip: 'Profile',
                             onPressed: () {
