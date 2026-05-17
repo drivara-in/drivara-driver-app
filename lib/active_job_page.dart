@@ -1419,7 +1419,9 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                     final lng = (stop['lng'] as num?)?.toDouble();
                     final name = (stop['outletName'] ?? 'Fuel stop').toString();
                     if (lat != null && lng != null) {
-                      _launchMapsNavigation(lat, lng, name);
+                      final truck = _vehicleLatLng();
+                      _launchMapsNavigation(lat, lng, name,
+                          originLat: truck?[0], originLng: truck?[1]);
                     }
                   },
                   onFuelStationTap: (station) async {
@@ -2421,30 +2423,43 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
 
   // Deep-link into the driver's installed map app. Zero cost to Drivara — the driver's
   // Google Maps (or fallback map app) handles turn-by-turn, re-routing, traffic, voice
-  // guidance. We just hand off the pump's lat/lng.
+  // guidance. We just hand off the destination lat/lng.
+  //
+  // When `origin` is supplied (truck's lat/lng for next-stop nav), Google Maps
+  // computes the route from THAT point instead of the phone's GPS. Matters
+  // when the driver has briefly stepped away from the truck — the route
+  // shown should be the truck's route, not "directions from wherever I'm
+  // standing". For the Navigate-to-Truck banner we leave origin null so
+  // Google Maps uses the phone's GPS (driver wants directions from where
+  // they actually are to the parked truck).
   Future<void> _launchMapsNavigation(
     double lat,
     double lng,
     String label, {
     List<List<double>> waypoints = const [],
+    double? originLat,
+    double? originLng,
   }) async {
-    // With waypoints (fuel stops between here and the destination) the only
-    // URI scheme that supports them is the universal Maps web URL — the
-    // android `google.navigation:` scheme has no waypoints concept.
-    if (waypoints.isNotEmpty) {
+    // With waypoints OR an explicit origin we have to use the universal Maps
+    // web URL — the android `google.navigation:` scheme supports neither.
+    final hasOrigin = originLat != null && originLng != null;
+    if (waypoints.isNotEmpty || hasOrigin) {
       final wpStr = waypoints.map((p) => '${p[0]},${p[1]}').join('|');
+      final originStr = hasOrigin ? '&origin=$originLat,$originLng' : '';
+      final wpQuery = waypoints.isNotEmpty ? '&waypoints=${Uri.encodeComponent(wpStr)}' : '';
       final webUri = Uri.parse(
         'https://www.google.com/maps/dir/?api=1'
+        '$originStr'
         '&destination=$lat,$lng'
-        '&waypoints=${Uri.encodeComponent(wpStr)}'
+        '$wpQuery'
         '&travelmode=driving',
       );
       await launchUrl(webUri, mode: LaunchMode.externalApplication);
       return;
     }
 
-    // No waypoints → prefer the native Google Maps navigation URI for an
-    // immediate turn-by-turn launch.
+    // No waypoints, no origin → prefer the native Google Maps navigation URI
+    // for an immediate turn-by-turn launch (origin defaults to phone GPS).
     final navUri = Uri.parse('google.navigation:q=$lat,$lng');
     if (await canLaunchUrl(navUri)) {
       await launchUrl(navUri, mode: LaunchMode.externalApplication);
@@ -2668,7 +2683,11 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: (lat != 0 && lng != 0)
-                  ? () => _launchMapsNavigation(lat, lng, outletName)
+                  ? () {
+                      final truck = _vehicleLatLng();
+                      _launchMapsNavigation(lat, lng, outletName,
+                          originLat: truck?[0], originLng: truck?[1]);
+                    }
                   : null,
               icon: const Icon(Icons.navigation_rounded, size: 18),
               label: Text(t.t('action_navigate') ?? 'Navigate'),
@@ -2779,7 +2798,21 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
         ),
       );
     }
-    await _launchMapsNavigation(lat, lng, label, waypoints: fuelWaypoints);
+    // Anchor the route at the truck's current location, not the phone's GPS.
+    // When the driver has stepped away from the truck (parked, refuelling
+    // outside the cab, etc.) Google Maps' default behaviour of using the
+    // phone GPS as origin produces nonsense directions — distance and ETA
+    // start from wherever the driver is standing instead of from the truck
+    // that's actually going to drive the route.
+    final truckLatLng = _vehicleLatLng();
+    await _launchMapsNavigation(
+      lat,
+      lng,
+      label,
+      waypoints: fuelWaypoints,
+      originLat: truckLatLng?[0],
+      originLng: truckLatLng?[1],
+    );
   }
 
   /// Open the 24-hour history sheet for a tank/gauge metric.
@@ -3148,7 +3181,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                 children: [
                   Text(
                     isFar
-                        ? (t.t('vehicle_far_label') ?? 'WALKED TOO FAR FROM TRUCK')
+                        ? (t.t('vehicle_far_label') ?? 'TOO FAR FROM TRUCK')
                         : (t.t('vehicle_away_label') ?? 'VEHICLE LOCATION'),
                     style: GoogleFonts.inter(
                       fontSize: 10,
@@ -3299,7 +3332,9 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                   final lat = double.tryParse(stop['lat'].toString());
                   final lng = double.tryParse(stop['lng'].toString());
                   if (lat != null && lng != null) {
-                    _launchMapsNavigation(lat, lng, outletName);
+                    final truck = _vehicleLatLng();
+                    _launchMapsNavigation(lat, lng, outletName,
+                        originLat: truck?[0], originLng: truck?[1]);
                   }
                 },
                 icon: const Icon(Icons.directions, color: Colors.white),
