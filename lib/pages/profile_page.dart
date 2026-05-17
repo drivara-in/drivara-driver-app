@@ -5,40 +5,29 @@ import 'package:drivara_driver_app/login_page.dart';
 import 'package:drivara_driver_app/services/messaging_service.dart';
 import 'package:drivara_driver_app/pages/loans_page.dart';
 
-// Driver Profile screen — single place for:
-//   • Driver basic info (avatar / name / phone)
-//   • DL details (number, class, issue/expiry/state)
-//   • Active vehicle's RC details (when the driver is on a job)
-//   • A tile linking out to the existing Loans screen
-//   • Logout (destructive, confirmation dialog)
-// Replaces the bare Logout icon that used to live on the active-job toolbar
-// and the full-width Logout button on the no-job page.
+// Driver Profile — single place for the driver's licence, the vehicle on
+// their currently-active job (RC), a Loans tile, and a destructive Logout.
+//
+// DL and RC are drawn as facsimile cards in the same visual style the web
+// admin uses (client/src/components/DriverDLCard.tsx + VehicleRCCard.tsx):
+//   • DL  — amber/cream gradient, blue header band, IN emblem, photo,
+//           DL number, name, DOB, DOI, COV, blood group, address, validity.
+//   • RC  — blue gradient, blue header band, IN emblem, reg number,
+//           owner, make/model/colour, class/body/GVW, engine + chassis,
+//           validity rows (RC / Insurance / PUC / Permit / Tax).
+// Each card flips its status pill to red INACTIVE when any tracked date
+// has expired, mirroring the web's logic.
 
-final _dateFmt = DateFormat('d MMM yyyy');
+final _fmtDateDdMmYyyy = DateFormat('dd/MM/yyyy');
 
-String _fmtDate(dynamic v) {
-  if (v == null) return '—';
-  try {
-    return _dateFmt.format(DateTime.parse(v.toString()).toLocal());
-  } catch (_) {
-    return v.toString();
-  }
+String? _fmtDate(dynamic raw) {
+  if (raw == null) return null;
+  try { return _fmtDateDdMmYyyy.format(DateTime.parse(raw.toString()).toLocal()); } catch (_) { return raw.toString(); }
 }
 
-/// Returns (label, color) reflecting how close `date` is to today.
-({String label, Color color}) _expiryBadge(dynamic raw) {
-  if (raw == null) return (label: '—', color: Colors.grey);
-  DateTime? d;
-  try {
-    d = DateTime.parse(raw.toString()).toLocal();
-  } catch (_) {
-    return (label: '—', color: Colors.grey);
-  }
-  final today = DateTime.now();
-  final days = d.difference(DateTime(today.year, today.month, today.day)).inDays;
-  if (days < 0) return (label: 'EXPIRED', color: Colors.red.shade700);
-  if (days <= 30) return (label: '$days days', color: Colors.orange.shade700);
-  return (label: 'Valid', color: Colors.green.shade700);
+bool _isExpired(dynamic raw) {
+  if (raw == null) return false;
+  try { return DateTime.parse(raw.toString()).toLocal().isBefore(DateTime.now()); } catch (_) { return false; }
 }
 
 class ProfilePage extends StatefulWidget {
@@ -97,9 +86,7 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
     if (ok != true) return;
-    try {
-      await MessagingService().unregisterOnLogout();
-    } catch (_) { /* best-effort */ }
+    try { await MessagingService().unregisterOnLogout(); } catch (_) {}
     await ApiConfig.logout();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
@@ -126,28 +113,36 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildBody(BuildContext context, Map<String, dynamic> p) {
-    final license = (p['license'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final license = (p['license'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
     final vehicle = (p['active_vehicle'] as Map?)?.cast<String, dynamic>();
-    final loans = (p['loans_summary'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final loans = (p['loans_summary'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
     final loanCount = (loans['active_count'] as num?)?.toInt() ?? 0;
     final loanOutstanding = (loans['outstanding_total'] as num?)?.toDouble() ?? 0;
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _HeaderCard(profile: p),
+        _ProfileHeader(profile: p),
         const SizedBox(height: 16),
-        _SectionTitle('Driving Licence'),
-        _LicenseCard(license: license),
+        Center(child: _DLCard(profile: p, license: license)),
         if (vehicle != null) ...[
           const SizedBox(height: 16),
-          _SectionTitle('Vehicle (RC)'),
-          _VehicleCard(vehicle: vehicle),
+          Center(child: _RCCard(vehicle: vehicle)),
         ],
         if (loanCount > 0) ...[
           const SizedBox(height: 16),
-          _SectionTitle('Loans'),
-          _LoansSummaryCard(activeCount: loanCount, outstanding: loanOutstanding),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.account_balance),
+              title: Text('$loanCount active loan${loanCount == 1 ? '' : 's'}',
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: Text(
+                'Outstanding: ${NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(loanOutstanding)}',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LoansPage())),
+            ),
+          ),
         ],
         const SizedBox(height: 24),
         SizedBox(
@@ -155,7 +150,8 @@ class _ProfilePageState extends State<ProfilePage> {
           child: OutlinedButton.icon(
             onPressed: _confirmAndLogout,
             icon: Icon(Icons.logout, color: Colors.red.shade700),
-            label: Text('Log out', style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.w600)),
+            label: Text('Log out',
+                style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.w600)),
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
               side: BorderSide(color: Colors.red.shade300),
@@ -169,30 +165,9 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  final String text;
-  const _SectionTitle(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
-      child: Text(
-        text.toUpperCase(),
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.2,
-          color: Theme.of(context).textTheme.bodySmall?.color,
-        ),
-      ),
-    );
-  }
-}
-
-class _HeaderCard extends StatelessWidget {
+class _ProfileHeader extends StatelessWidget {
   final Map<String, dynamic> profile;
-  const _HeaderCard({required this.profile});
+  const _ProfileHeader({required this.profile});
 
   @override
   Widget build(BuildContext context) {
@@ -205,21 +180,7 @@ class _HeaderCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            CircleAvatar(
-              radius: 32,
-              backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.15),
-              backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
-                  ? NetworkImage(avatarUrl)
-                  : null,
-              child: (avatarUrl == null || avatarUrl.isEmpty)
-                  ? Text(initial,
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                        color: Theme.of(context).colorScheme.primary,
-                      ))
-                  : null,
-            ),
+            _AvatarCircle(url: avatarUrl, initials: initial, size: 64),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
@@ -239,199 +200,541 @@ class _HeaderCard extends StatelessWidget {
   }
 }
 
-class _LicenseCard extends StatelessWidget {
-  final Map<String, dynamic> license;
-  const _LicenseCard({required this.license});
+class _AvatarCircle extends StatelessWidget {
+  final String? url;
+  final String initials;
+  final double size;
+  const _AvatarCircle({required this.url, required this.initials, required this.size});
 
   @override
   Widget build(BuildContext context) {
-    final number = license['number']?.toString() ?? '—';
-    final klass = license['class']?.toString() ?? '—';
-    final issuedState = license['issued_state']?.toString() ?? '—';
+    final bg = Theme.of(context).colorScheme.primary.withOpacity(0.15);
+    final fg = Theme.of(context).colorScheme.primary;
+    final fallback = Container(
+      width: size, height: size,
+      decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+      alignment: Alignment.center,
+      child: Text(initials, style: TextStyle(fontSize: size / 2.7, fontWeight: FontWeight.w700, color: fg)),
+    );
+    if (url == null || url!.isEmpty) return fallback;
+    return ClipOval(
+      child: SizedBox(
+        width: size, height: size,
+        child: Image.network(
+          url!,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => fallback,
+        ),
+      ),
+    );
+  }
+}
+
+// ── DL card ────────────────────────────────────────────────────────────
+
+class _DLCard extends StatelessWidget {
+  final Map<String, dynamic> profile;
+  final Map<String, dynamic> license;
+  const _DLCard({required this.profile, required this.license});
+
+  @override
+  Widget build(BuildContext context) {
+    final name = profile['name']?.toString() ?? '';
+    final phone = profile['phone']?.toString();
+    final avatarUrl = profile['avatar_url']?.toString();
+    final initials = name.isNotEmpty ? name.trim().split(RegExp(r'\s+')).take(2).map((w) => w[0]).join().toUpperCase() : '?';
+
+    final dlNo = license['number']?.toString();
+    final klass = license['class']?.toString();
+    final issuedState = license['issued_state']?.toString();
     final isLearner = license['is_learner'] == true;
     final dob = license['dob'];
-    final issueDate = license['issue_date'];
+    final doi = license['issue_date'];
     final expiry = license['expiry'];
-    final badge = _expiryBadge(expiry);
+    final transExpiry = license['transport_doe'];
+    final fatherName = license['father_or_husband_name']?.toString();
+    final blood = license['blood_group']?.toString();
+    final badge = license['badge_number']?.toString();
+    final address = license['address']?.toString();
+    final state = license['state']?.toString();
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    final anyExpired = _isExpired(expiry) || _isExpired(transExpiry);
+    final activeStatus = !anyExpired;
+
+    return Container(
+      width: 340,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFFDF6E3), Color(0xFFF5E6C8)],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFCD34D).withOpacity(0.6)),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.20), blurRadius: 20, offset: const Offset(0, 8)),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header band
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(colors: [Color(0xFF1E40AF), Color(0xFF1E3A8A)]),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 18, height: 18,
+                  decoration: const BoxDecoration(color: Color(0xFFFBBF24), shape: BoxShape.circle),
+                  alignment: Alignment.center,
+                  child: const Text('IN', style: TextStyle(fontSize: 7, fontWeight: FontWeight.w900, color: Color(0xFF1E3A8A))),
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('DRIVING LICENCE',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 1.0)),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: activeStatus ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(activeStatus ? 'ACTIVE' : 'INACTIVE',
+                      style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
+                ),
+              ],
+            ),
+          ),
+          // Photo + main details
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: SizedBox(
+                    width: 64, height: 78,
+                    child: (avatarUrl != null && avatarUrl.isNotEmpty)
+                        ? Image.network(
+                            avatarUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => _photoFallback(initials),
+                          )
+                        : _photoFallback(initials),
+                  ),
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(number,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                fontFeatures: const [FontFeature.tabularFigures()],
-                              )),
+                      if (dlNo != null && dlNo.isNotEmpty || blood != null && blood.isNotEmpty)
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (dlNo != null && dlNo.isNotEmpty)
+                              Expanded(child: _miniField('DL No.', dlNo, bold: true)),
+                            if (blood != null && blood.isNotEmpty)
+                              Container(
+                                margin: const EdgeInsets.only(top: 2),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFDC2626),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(blood,
+                                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
+                              ),
+                          ],
+                        ),
                       const SizedBox(height: 4),
-                      Wrap(spacing: 8, runSpacing: 4, children: [
-                        _chip(context, klass),
-                        if (isLearner) _chip(context, 'LEARNER', color: Colors.orange),
-                      ]),
+                      _miniField('Name', name),
+                      if (isLearner)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF59E0B).withOpacity(0.20),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text('LEARNER',
+                                style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFFB45309))),
+                          ),
+                        ),
+                      if (fatherName != null && fatherName.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: _miniField('S/W/D of', fatherName),
+                        ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          if (dob != null) Padding(padding: const EdgeInsets.only(right: 16), child: _miniField('DOB', _fmtDate(dob) ?? '—')),
+                          if (doi != null) _miniField('DOI', _fmtDate(doi) ?? '—'),
+                        ],
+                      ),
                     ],
                   ),
                 ),
-                _expiryPill(badge),
               ],
             ),
-            const Divider(height: 24),
-            _kv(context, 'Expires', _fmtDate(expiry)),
-            _kv(context, 'Issued', _fmtDate(issueDate)),
-            _kv(context, 'State', issuedState),
-            _kv(context, 'Date of birth', _fmtDate(dob)),
-          ],
-        ),
+          ),
+          // Badge + COV + Address
+          if ((badge != null && badge.isNotEmpty) ||
+              (klass != null && klass.isNotEmpty) ||
+              (address != null && address.isNotEmpty) ||
+              (state != null && state.isNotEmpty))
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      if (badge != null && badge.isNotEmpty)
+                        Padding(padding: const EdgeInsets.only(right: 16), child: _miniField('Badge', badge)),
+                      if (klass != null && klass.isNotEmpty)
+                        Expanded(child: _miniField('COV', klass)),
+                    ],
+                  ),
+                  if ((address != null && address.isNotEmpty) || (state != null && state.isNotEmpty))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: _miniField('Address', address ?? state ?? ''),
+                    ),
+                  if (issuedState != null && issuedState.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: _miniField('Issued state', issuedState),
+                    ),
+                ],
+              ),
+            ),
+          // Validity strip
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF3C7).withOpacity(0.5),
+              border: Border(top: BorderSide(color: const Color(0xFFFCD34D).withOpacity(0.4))),
+            ),
+            child: Row(
+              children: [
+                if (expiry != null)
+                  Expanded(child: _validityCell('Non-Trans Valid Till', expiry)),
+                if (transExpiry != null)
+                  Expanded(child: _validityCell('Trans Valid Till', transExpiry, alignEnd: true)),
+              ],
+            ),
+          ),
+          if (phone != null && phone.isNotEmpty)
+            Container(
+              width: double.infinity,
+              color: const Color(0xFF1E3A8A).withOpacity(0.08),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Text(phone, style: TextStyle(fontSize: 10, color: Colors.grey.shade700)),
+            ),
+        ],
       ),
     );
   }
 }
 
-class _VehicleCard extends StatelessWidget {
+Widget _photoFallback(String initials) => Container(
+      color: const Color(0xFFE2E8F0),
+      alignment: Alignment.center,
+      child: Text(initials,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF94A3B8))),
+    );
+
+Widget _miniField(String label, String value, {bool bold = false}) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(label.toUpperCase(),
+          style: TextStyle(fontSize: 8, fontWeight: FontWeight.w600, color: const Color(0xFFB45309).withOpacity(0.7), letterSpacing: 0.4)),
+      Text(value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: bold ? 13 : 11,
+            fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+            color: const Color(0xFF1E293B),
+          )),
+    ],
+  );
+}
+
+Widget _validityCell(String label, dynamic raw, {bool alignEnd = false}) {
+  final expired = _isExpired(raw);
+  return Column(
+    crossAxisAlignment: alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(label.toUpperCase(),
+          style: TextStyle(fontSize: 8, fontWeight: FontWeight.w600, color: const Color(0xFFB45309).withOpacity(0.7), letterSpacing: 0.4)),
+      Text(_fmtDate(raw) ?? '—',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            color: expired ? const Color(0xFFDC2626) : const Color(0xFF334155),
+          )),
+    ],
+  );
+}
+
+// ── RC card ────────────────────────────────────────────────────────────
+
+class _RCCard extends StatelessWidget {
   final Map<String, dynamic> vehicle;
-  const _VehicleCard({required this.vehicle});
+  const _RCCard({required this.vehicle});
 
   @override
   Widget build(BuildContext context) {
     final reg = vehicle['registration_number']?.toString() ?? '—';
+    final owner = vehicle['owner_name']?.toString();
     final make = vehicle['make']?.toString();
     final model = vehicle['model']?.toString();
-    final year = vehicle['model_year']?.toString();
-    final klass = vehicle['vehicle_class']?.toString();
     final color = vehicle['color']?.toString();
-    final tank = vehicle['fuel_tank_capacity'];
     final fuel = vehicle['fuel_type']?.toString();
-    final owner = vehicle['owner_name']?.toString();
-    final summaryParts = [make, model, year, klass].whereType<String>().where((s) => s.isNotEmpty);
+    final klass = vehicle['vehicle_class']?.toString();
+    final bodyType = vehicle['body_type']?.toString();
+    final capacityKg = vehicle['capacity_kg'];
+    final engine = vehicle['engine_number']?.toString();
+    final chassis = vehicle['chassis_number']?.toString();
+    final rcExp = vehicle['rc_expiry'];
+    final insExp = vehicle['insurance_expiry'];
+    final pucExp = vehicle['pollution_certificate_expiry'];
+    final permitExp = vehicle['national_permit_expiry'] ?? vehicle['national_permit_upto'];
+    final taxExp = vehicle['tax_paid_upto'] ?? vehicle['road_tax_expiry'];
+    final financer = vehicle['financer']?.toString();
+    final insCo = vehicle['insurance_company']?.toString();
+    final rcStatus = vehicle['rc_status']?.toString();
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(reg,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                    )),
-            if (summaryParts.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(summaryParts.join(' · '),
-                    style: Theme.of(context).textTheme.bodyMedium),
+    final anyExpired = [rcExp, insExp, pucExp, permitExp, taxExp].any(_isExpired);
+    final activeStatus = !anyExpired && (rcStatus == null || rcStatus.toUpperCase() != 'INACTIVE');
+
+    return Container(
+      width: 340,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFEEF2FF), Color(0xFFDBEAFE)],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF93C5FD).withOpacity(0.6)),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.20), blurRadius: 20, offset: const Offset(0, 8)),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(colors: [Color(0xFF1E40AF), Color(0xFF1E3A8A)]),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 18, height: 18,
+                  decoration: const BoxDecoration(color: Color(0xFF60A5FA), shape: BoxShape.circle),
+                  alignment: Alignment.center,
+                  child: const Text('IN',
+                      style: TextStyle(fontSize: 7, fontWeight: FontWeight.w900, color: Colors.white)),
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('REGISTRATION CERTIFICATE',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.8)),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: activeStatus ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(activeStatus ? 'ACTIVE' : 'INACTIVE',
+                      style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _rcField('Reg. No.', reg, bold: true)),
+                    if (fuel != null && fuel.isNotEmpty)
+                      Container(
+                        margin: const EdgeInsets.only(top: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF059669),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(fuel,
+                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
+                      ),
+                  ],
+                ),
+                if (owner != null && owner.isNotEmpty)
+                  Padding(padding: const EdgeInsets.only(top: 4), child: _rcField('Owner', owner)),
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
+                    children: [
+                      if ((make != null && make.isNotEmpty) || (model != null && model.isNotEmpty))
+                        Expanded(child: _rcField('Make / Model', [make, model].whereType<String>().where((s) => s.isNotEmpty).join(' '))),
+                      if (color != null && color.isNotEmpty)
+                        Padding(padding: const EdgeInsets.only(left: 12), child: _rcField('Color', color)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if ((klass != null && klass.isNotEmpty) ||
+              (bodyType != null && bodyType.isNotEmpty) ||
+              (capacityKg != null))
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+              child: Row(
+                children: [
+                  if (klass != null && klass.isNotEmpty)
+                    Expanded(child: _rcField('Class', klass)),
+                  if (bodyType != null && bodyType.isNotEmpty)
+                    Padding(padding: const EdgeInsets.only(left: 12), child: _rcField('Body', bodyType)),
+                  if (capacityKg != null)
+                    Padding(padding: const EdgeInsets.only(left: 12), child: _rcField('GVW', '$capacityKg kg')),
+                ],
               ),
-            const SizedBox(height: 12),
-            _expiryRow(context, 'RC', vehicle['rc_expiry']),
-            _expiryRow(context, 'Insurance', vehicle['insurance_expiry']),
-            _expiryRow(context, 'PUC', vehicle['pollution_certificate_expiry']),
-            _expiryRow(context, 'National permit', vehicle['national_permit_expiry']),
-            const Divider(height: 24),
-            if (owner != null && owner.isNotEmpty) _kv(context, 'Owner', owner),
-            if (color != null && color.isNotEmpty) _kv(context, 'Colour', color),
-            if (fuel != null && fuel.isNotEmpty) _kv(context, 'Fuel', fuel),
-            if (tank != null) _kv(context, 'Tank capacity', '${tank} L'),
-            if (vehicle['permit_number'] != null && vehicle['permit_number'].toString().isNotEmpty)
-              _kv(context, 'Permit number', vehicle['permit_number'].toString()),
-            if (vehicle['insurance_company'] != null && vehicle['insurance_company'].toString().isNotEmpty)
-              _kv(context, 'Insurer', vehicle['insurance_company'].toString()),
-          ],
-        ),
+            ),
+          if ((engine != null && engine.isNotEmpty) || (chassis != null && chassis.isNotEmpty))
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+              child: Row(
+                children: [
+                  if (engine != null && engine.isNotEmpty)
+                    Expanded(child: _rcMono('Engine No.', engine)),
+                  if (chassis != null && chassis.isNotEmpty)
+                    Padding(padding: const EdgeInsets.only(left: 12), child: SizedBox(width: 130, child: _rcMono('Chassis No.', chassis))),
+                ],
+              ),
+            ),
+          // Validity strip
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFDBEAFE).withOpacity(0.5),
+              border: Border(top: BorderSide(color: const Color(0xFF93C5FD).withOpacity(0.4))),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: _rcValidity('RC Valid Till', rcExp)),
+                    Expanded(child: _rcValidity('Insurance Till', insExp, alignEnd: true)),
+                  ],
+                ),
+                if (pucExp != null || permitExp != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      children: [
+                        Expanded(child: _rcValidity('PUC Till', pucExp)),
+                        Expanded(child: _rcValidity('Permit Till', permitExp, alignEnd: true)),
+                      ],
+                    ),
+                  ),
+                if (taxExp != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      children: [
+                        Expanded(child: _rcValidity('Tax Paid Upto', taxExp)),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if ((financer != null && financer.isNotEmpty) || (insCo != null && insCo.isNotEmpty))
+            Container(
+              width: double.infinity,
+              color: const Color(0xFF1E3A8A).withOpacity(0.08),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Text(
+                [if (insCo != null && insCo.isNotEmpty) 'Ins: $insCo', if (financer != null && financer.isNotEmpty) 'Fin: $financer'].join(' · '),
+                style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+              ),
+            ),
+        ],
       ),
     );
   }
 }
 
-class _LoansSummaryCard extends StatelessWidget {
-  final int activeCount;
-  final double outstanding;
-  const _LoansSummaryCard({required this.activeCount, required this.outstanding});
-
-  @override
-  Widget build(BuildContext context) {
-    final currency = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
-    return Card(
-      child: ListTile(
-        leading: const Icon(Icons.account_balance),
-        title: Text('$activeCount active loan${activeCount == 1 ? '' : 's'}',
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text('Outstanding: ${currency.format(outstanding)}'),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const LoansPage()));
-        },
-      ),
-    );
-  }
-}
-
-Widget _kv(BuildContext context, String label, String value) {
-  return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(
+Widget _rcField(String label, String value, {bool bold = false}) => Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(
-          width: 130,
-          child: Text(label, style: Theme.of(context).textTheme.bodySmall),
-        ),
-        Expanded(
-          child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
-        ),
+        Text(label.toUpperCase(),
+            style: TextStyle(fontSize: 8, fontWeight: FontWeight.w600, color: const Color(0xFF1D4ED8).withOpacity(0.7), letterSpacing: 0.4)),
+        Text(value,
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: bold ? 14 : 11,
+              fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+              color: const Color(0xFF1E293B),
+              letterSpacing: bold ? 0.6 : 0,
+            )),
       ],
-    ),
-  );
-}
+    );
 
-Widget _expiryRow(BuildContext context, String label, dynamic raw) {
-  final badge = _expiryBadge(raw);
-  return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(
+Widget _rcMono(String label, String value) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(
-          width: 130,
-          child: Text(label, style: Theme.of(context).textTheme.bodySmall),
-        ),
-        Expanded(
-          child: Text(_fmtDate(raw), style: const TextStyle(fontWeight: FontWeight.w600)),
-        ),
-        _expiryPill(badge),
+        Text(label.toUpperCase(),
+            style: TextStyle(fontSize: 8, fontWeight: FontWeight.w600, color: const Color(0xFF1D4ED8).withOpacity(0.7), letterSpacing: 0.4)),
+        Text(value,
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: Color(0xFF475569))),
       ],
-    ),
-  );
-}
+    );
 
-Widget _expiryPill(({String label, Color color}) badge) {
-  return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: BoxDecoration(
-      color: badge.color.withOpacity(0.12),
-      borderRadius: BorderRadius.circular(10),
-    ),
-    child: Text(
-      badge.label,
-      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: badge.color),
-    ),
-  );
-}
-
-Widget _chip(BuildContext context, String label, {Color? color}) {
-  final c = color ?? Theme.of(context).colorScheme.primary;
-  return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: BoxDecoration(
-      color: c.withOpacity(0.10),
-      borderRadius: BorderRadius.circular(8),
-    ),
-    child: Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c)),
+Widget _rcValidity(String label, dynamic raw, {bool alignEnd = false}) {
+  final expired = _isExpired(raw);
+  return Column(
+    crossAxisAlignment: alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(label.toUpperCase(),
+          style: TextStyle(fontSize: 8, fontWeight: FontWeight.w600, color: const Color(0xFF1D4ED8).withOpacity(0.7), letterSpacing: 0.4)),
+      Text(_fmtDate(raw) ?? '—',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            color: expired ? const Color(0xFFDC2626) : const Color(0xFF334155),
+          )),
+    ],
   );
 }

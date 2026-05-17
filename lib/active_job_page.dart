@@ -2402,9 +2402,13 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                             // init via _fetchProfileAvatar) and falls back to
                             // a generic person glyph otherwise.
                             icon: (_avatarUrl != null && _avatarUrl!.isNotEmpty)
-                                ? CircleAvatar(
-                                    radius: 14,
-                                    backgroundImage: NetworkImage(_avatarUrl!),
+                                ? ClipOval(
+                                    child: Image.network(
+                                      _avatarUrl!,
+                                      width: 28, height: 28,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const Icon(Icons.account_circle_outlined),
+                                    ),
                                   )
                                 : const Icon(Icons.account_circle_outlined),
                             color: Theme.of(context).iconTheme.color,

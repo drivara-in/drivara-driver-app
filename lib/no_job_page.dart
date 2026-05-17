@@ -97,7 +97,14 @@ class _NoJobPageState extends State<NoJobPage> with WidgetsBindingObserver {
         actions: [
           IconButton(
             icon: (_avatarUrl != null && _avatarUrl!.isNotEmpty)
-                ? CircleAvatar(radius: 14, backgroundImage: NetworkImage(_avatarUrl!))
+                ? ClipOval(
+                    child: Image.network(
+                      _avatarUrl!,
+                      width: 28, height: 28,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.account_circle_outlined),
+                    ),
+                  )
                 : const Icon(Icons.account_circle_outlined),
             tooltip: 'Profile',
             onPressed: () {
