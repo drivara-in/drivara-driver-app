@@ -26,6 +26,7 @@ import 'package:drivara_driver_app/pages/tyre_management_page.dart';
 import 'package:drivara_driver_app/pages/loans_page.dart';
 import 'package:drivara_driver_app/pages/earnings_page.dart';
 import 'package:drivara_driver_app/pages/settlement_sheet.dart';
+import 'package:drivara_driver_app/pages/profile_page.dart';
 import 'leaderboard_page.dart';
 import 'api_config.dart';
 import 'providers/localization_provider.dart';
@@ -2408,16 +2409,17 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                             onPressed: () => _showLanguageSheet(context, t),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.logout),
+                            // Profile takes over from the old Logout icon —
+                            // Logout now lives at the bottom of the Profile
+                            // page (with a confirm dialog), alongside DL/RC/
+                            // loans visibility. Avoids accidental logouts from
+                            // the toolbar that used to ship next to the theme
+                            // and language buttons.
+                            icon: const Icon(Icons.account_circle_outlined),
                             color: Theme.of(context).iconTheme.color,
-                            onPressed: () async {
-                               await MessagingService().unregisterOnLogout();
-                               await ApiConfig.logout();
-                               if (!mounted) return;
-                               Navigator.of(context).pushAndRemoveUntil(
-                                  MaterialPageRoute(builder: (_) => const LoginPage()),
-                                  (route) => false
-                               );
+                            tooltip: 'Profile',
+                            onPressed: () {
+                              Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilePage()));
                             },
                           )
                         ],

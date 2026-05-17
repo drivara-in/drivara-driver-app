@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'package:google_fonts/google_fonts.dart';
 import 'api_config.dart';
-import 'login_page.dart';
 import 'active_job_page.dart';
 import 'leaderboard_page.dart';
 import 'pages/earnings_page.dart';
+import 'pages/profile_page.dart';
 import 'theme/app_theme.dart';
 import 'package:provider/provider.dart';
 import 'providers/localization_provider.dart';
@@ -76,6 +75,23 @@ class _NoJobPageState extends State<NoJobPage> with WidgetsBindingObserver {
     final t = Provider.of<LocalizationProvider>(context);
     return Scaffold(
       backgroundColor: AppColors.background,
+      // Lightweight top bar just for the Profile entry point — the page is
+      // otherwise a centered "no job" splash. Logout used to live as a
+      // full-width button at the bottom; it now lives inside Profile (with a
+      // confirm dialog) so a casual tap can't sign the driver out.
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.account_circle_outlined),
+            tooltip: 'Profile',
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilePage()));
+            },
+          ),
+        ],
+      ),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(32.0),
@@ -131,24 +147,6 @@ class _NoJobPageState extends State<NoJobPage> with WidgetsBindingObserver {
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () async {
-                     _pollTimer?.cancel();
-                     await ApiConfig.logout();
-                     if (context.mounted) {
-                       Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(builder: (_) => const LoginPage()), 
-                          (route) => false
-                       );
-                     }
-                  },
-                  style: AppTheme.darkTheme.outlinedButtonTheme.style,
-                  child: Text(t.t('logout')),
                 ),
               ),
               const SizedBox(height: 20),
