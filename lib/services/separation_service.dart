@@ -7,7 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../api_config.dart';
 
 /// Watches the distance between the driver's phone and the vehicle they're
-/// assigned to. Fires a critical alert when the phone is >5 km from the
+/// assigned to. Fires a critical alert when the phone is >1 km from the
 /// vehicle — used to catch cases where a driver wanders off or hands the
 /// truck to someone else.
 ///
@@ -28,7 +28,7 @@ class SeparationService {
   factory SeparationService() => _instance;
   SeparationService._internal();
 
-  static const double _thresholdKm = 5.0;
+  static const double _thresholdKm = 1.0;
   static const Duration _pollInterval = Duration(minutes: 5);
   static const Duration _escalationAfter = Duration(minutes: 2);
   static const Duration _breachCooldown = Duration(minutes: 30);

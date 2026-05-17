@@ -53,7 +53,7 @@ class _PermissionsPageState extends State<PermissionsPage> {
         title: const Text('Allow background location?'),
         content: const Text(
           'Drivara needs background location to:\n\n'
-          '• Alert you if you walk more than 5 km away from your assigned vehicle '
+          '• Alert you if you walk more than 1 km away from your assigned vehicle '
           '(driver-vehicle separation safety alert).\n'
           '• Chime when you are within 2 km of a planned fuel stop so you do not '
           'overshoot a pre-paid pump.\n\n'

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../providers/localization_provider.dart';
 
 // Reusable "I owe you" sheet shown to the driver:
 //  1. Right after they tap Complete Trip on the active-job page, so they see
@@ -24,7 +26,7 @@ Future<void> showSettlementSheet(
   BuildContext context, {
   required Map<String, dynamic> settlement,
   String? jobTitle,
-  String okLabel = 'OK',
+  String? okLabel,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -44,7 +46,7 @@ Future<void> showSettlementSheet(
 class _SettlementSheetContent extends StatelessWidget {
   final Map<String, dynamic> settlement;
   final String? jobTitle;
-  final String okLabel;
+  final String? okLabel;
 
   const _SettlementSheetContent({
     required this.settlement,
@@ -54,7 +56,7 @@ class _SettlementSheetContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final role = settlement['role']?.toString() ?? 'primary';
+    final t = Provider.of<LocalizationProvider>(context);
     final salary = double.tryParse('${settlement['salary_share'] ?? 0}') ?? 0;
     final expenses = double.tryParse('${settlement['expenses_logged'] ?? 0}') ?? 0;
     final advance = double.tryParse('${settlement['advance_taken'] ?? 0}') ?? 0;
@@ -62,6 +64,7 @@ class _SettlementSheetContent extends StatelessWidget {
 
     final netIsPositive = net >= 0;
     final netColor = netIsPositive ? Colors.green.shade700 : Colors.red.shade700;
+    final resolvedOk = okLabel ?? (t.t('settlement_done') ?? 'Done');
 
     return SafeArea(
       child: Padding(
@@ -85,7 +88,7 @@ class _SettlementSheetContent extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Trip Settlement',
+                  Text(t.t('settlement_title') ?? 'Trip Settlement',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
                   if (jobTitle != null && jobTitle!.isNotEmpty)
                     Padding(
@@ -93,22 +96,6 @@ class _SettlementSheetContent extends StatelessWidget {
                       child: Text(jobTitle!,
                           style: Theme.of(context).textTheme.bodySmall),
                     ),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withOpacity(0.10),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(role.toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: Theme.of(context).colorScheme.primary,
-                          )),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -117,15 +104,18 @@ class _SettlementSheetContent extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
                 children: [
-                  _row(context, 'Salary', _fmt(salary)),
-                  _row(context, 'Expenses you logged', _fmt(expenses)),
-                  _row(context, 'Advance taken', '− ${_fmt(advance)}'),
+                  _row(context, t.t('settlement_salary') ?? 'Salary', _fmt(salary)),
+                  _row(context, t.t('settlement_expenses_logged') ?? 'Expenses you logged', _fmt(expenses)),
+                  _row(context, t.t('settlement_advance_taken') ?? 'Advance taken', '− ${_fmt(advance)}'),
                   const Divider(height: 24),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Text('Net payable to you',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                      Expanded(
+                        child: Text(t.t('settlement_net_payable') ?? 'Net payable to you',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                      ),
+                      const SizedBox(width: 12),
                       Text(_fmt(net),
                           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                                 fontWeight: FontWeight.w800,
@@ -144,7 +134,7 @@ class _SettlementSheetContent extends StatelessWidget {
                   minimumSize: const Size.fromHeight(48),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: Text(okLabel, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                child: Text(resolvedOk, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
               ),
             ),
           ],
@@ -157,9 +147,12 @@ class _SettlementSheetContent extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(label, style: Theme.of(context).textTheme.bodyMedium),
+          Expanded(
+            child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
+          ),
+          const SizedBox(width: 12),
           Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
         ],
       ),

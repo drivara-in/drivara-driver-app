@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:dio/dio.dart';
@@ -95,6 +96,13 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
   bool _stoppageReasonRequested = false;
   String? _activeStoppageId;
   bool _stoppageSheetShowing = false;
+  // Geofence guard against re-prompting at the same halt. Persisted per job
+  // in shared_preferences so the sheet doesn't pop on every app open while
+  // the truck hasn't moved. We re-show only once the vehicle has moved
+  // ≥500 m from where we last prompted (or 24 h has elapsed).
+  double? _lastStoppagePromptLat;
+  double? _lastStoppagePromptLng;
+  DateTime? _lastStoppagePromptAt;
 
   // Driver's avatar URL (if uploaded) — used to render the Profile icon in
   // the toolbar with the actual driver's photo instead of a generic person
@@ -257,6 +265,54 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
       _startPolling();
       _fetchStoppageReasons();
       _fetchProfileAvatar();
+      _loadStoppagePromptState();
+  }
+
+  Future<void> _loadStoppagePromptState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('stoppage_prompted_${_job['id']}');
+      if (raw == null) return;
+      final parts = raw.split(',');
+      if (parts.length != 3) return;
+      final lat = double.tryParse(parts[0]);
+      final lng = double.tryParse(parts[1]);
+      final epoch = int.tryParse(parts[2]);
+      if (lat == null || lng == null || epoch == null) return;
+      _lastStoppagePromptLat = lat;
+      _lastStoppagePromptLng = lng;
+      _lastStoppagePromptAt = DateTime.fromMillisecondsSinceEpoch(epoch);
+    } catch (e) {
+      debugPrint('[stoppages] load prompt state failed: $e');
+    }
+  }
+
+  // Returns true when we've already shown the stoppage sheet at roughly the
+  // current location. No time-based expiry — once the driver has explained
+  // the halt at this spot, we don't ask again until they actually move
+  // ≥500 m. The truck can sit there for days; one prompt is enough.
+  bool _wasRecentlyPromptedNearby(double? vLat, double? vLng) {
+    if (vLat == null || vLng == null) return false;
+    if (_lastStoppagePromptLat == null || _lastStoppagePromptLng == null) return false;
+    final km = _getHaversineDistance(
+      vLat, vLng, _lastStoppagePromptLat!, _lastStoppagePromptLng!,
+    );
+    return km < 0.5;
+  }
+
+  Future<void> _recordStoppagePrompt(double vLat, double vLng) async {
+    _lastStoppagePromptLat = vLat;
+    _lastStoppagePromptLng = vLng;
+    _lastStoppagePromptAt = DateTime.now();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'stoppage_prompted_${_job['id']}',
+        '$vLat,$vLng,${_lastStoppagePromptAt!.millisecondsSinceEpoch}',
+      );
+    } catch (e) {
+      debugPrint('[stoppages] save prompt state failed: $e');
+    }
   }
 
   Future<void> _fetchProfileAvatar() async {
@@ -507,7 +563,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
               }
               // --- End Behavior Service ---
 
-              // --- Separation Service: 5km driver-vehicle distance alert ---
+              // --- Separation Service: 1km driver-vehicle distance alert ---
               if (bLat != 0.0 && bLng != 0.0) {
                 if (!SeparationService().isRunning) {
                   SeparationService().start(jobId: _job['id']);
@@ -516,9 +572,17 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
               }
               // --- End Separation Service ---
 
-              // User definition: Stopped = Ignition OFF
-              // Strictly check ignition.
-              bool isStopped = (ignition == false);
+              // "Stopped" means the engine is actually off, not just the key.
+              // iAlert reports ignition=true the moment the key reaches
+              // position 1 (electrics on), but the engine can still be
+              // dead silent. Prefer engine_speed (RPM > 100 == running) and
+              // fall back to ignition only when the sensor doesn't report
+              // RPM for this vehicle.
+              final num? rpmRaw = _parseNum(data['engine_speed']);
+              final double? engineRpm = rpmRaw?.toDouble();
+              final bool isStopped = engineRpm != null
+                  ? engineRpm <= 100
+                  : (ignition == false);
 
               if (isStopped && actions.isNotEmpty) {
                   final action = actions.first;
@@ -554,15 +618,14 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
 
                   if (withinRadius) {
                       _stoppedSince ??= DateTime.now();
-                      
+
                       final duration = DateTime.now().difference(_stoppedSince!);
                       if (duration.inMinutes >= 5 && !_reminderSent) {
-                           final String actionLabel = action['label'] ?? 'Status';
-                           NotificationService().showNotification(
-                               id: 888,
-                               title: "Action Required: $actionLabel",
-                               body: "Ignition is OFF. Please tap '$actionLabel' to update."
-                           );
+                           // Notifications are owned by the server. The condition
+                           // (ignition OFF ≥5 min near a planned stop) is detected
+                           // server-side from vehicle telemetry and pushed via FCM
+                           // through MessagingService → NotificationService.
+                           // Local flag is kept so we don't re-flag every tick.
                            _reminderSent = true;
                       }
                   } else {
@@ -581,14 +644,28 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                   final elapsed = DateTime.now().difference(_unplannedStopSince!);
                   if (elapsed.inMinutes >= 15 && !_stoppageReasonRequested) {
                       _stoppageReasonRequested = true;
-                      NotificationService().showNotification(
-                          id: 889,
-                          title: Provider.of<LocalizationProvider>(context, listen: false).t('stoppage_why') ?? "Why did you stop?",
-                          body: Provider.of<LocalizationProvider>(context, listen: false).t('stoppage_provide_reason') ?? "Please provide a reason for stopping",
-                      );
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (mounted && !_stoppageSheetShowing) _showStoppageReasonSheet();
-                      });
+                      // Geofence guard — only re-prompt once the vehicle has
+                      // moved ≥500 m (or 24 h has elapsed) since the last
+                      // prompt. Without this, the sheet pops on every app
+                      // open while the truck sits at the same halt.
+                      final vLat = _parseNum(vehicle['location']?['lat'])?.toDouble();
+                      final vLng = _parseNum(vehicle['location']?['lng'])?.toDouble();
+                      if (_wasRecentlyPromptedNearby(vLat, vLng)) {
+                          debugPrint('[stoppages] suppressed — same halt as last prompt');
+                      } else {
+                          if (vLat != null && vLng != null) {
+                              // Record before showing so a quick dismiss
+                              // doesn't escape the geofence guard.
+                              unawaited(_recordStoppagePrompt(vLat, vLng));
+                          }
+                          // Notifications are owned by the server — "Why did
+                          // you stop?" is pushed via FCM when telemetry shows
+                          // an unplanned 15-min halt. The app only handles
+                          // the in-foreground UX (the sheet).
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted && !_stoppageSheetShowing) _showStoppageReasonSheet();
+                          });
+                      }
                   }
               } else if (!isStopped) {
                   // Vehicle is moving again — close active stoppage
@@ -819,11 +896,17 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     final stop = stops[stopIndex] as Map<String, dynamic>;
     final stopName = (stop['address'] ?? stop['label'] ?? 'Stop ${stopIndex + 1}').toString();
     final stopType = (stop['type'] ?? stop['stop_type'] ?? stop['activity'] ?? '').toString().toLowerCase();
-    final typeBadge = (stopType == 'loading' || stopType == 'unloading')
-        ? stopType.toUpperCase()
-        : null;
-
     final t = Provider.of<LocalizationProvider>(context, listen: false);
+    String? typeBadge;
+    if (stopType == 'loading') {
+      typeBadge = (t.t('badge_loading') ?? 'LOADING').toUpperCase();
+    } else if (stopType == 'unloading') {
+      typeBadge = (t.t('badge_unloading') ?? 'UNLOADING').toUpperCase();
+    }
+    final stopOfLabel = (t.t('stop_of_count') ?? 'Stop {n} of {total}')
+        .replaceFirst('{n}', '${stopIndex + 1}')
+        .replaceFirst('{total}', '${stops.length}');
+
     final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -834,7 +917,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Stop ${stopIndex + 1} of ${stops.length}',
+              stopOfLabel,
               style: TextStyle(color: Theme.of(ctx).hintColor, fontSize: 12),
             ),
             const SizedBox(height: 6),
@@ -876,7 +959,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(t.t('confirm') ?? 'Confirm'),
+            child: Text(t.t('action_confirm') ?? 'Confirm'),
           ),
         ],
       ),
@@ -991,15 +1074,15 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
       setState(() => _isActionLoading = false);
 
       if (response.data['ok'] == true) {
-         String msg = "Status updated";
          final t = Provider.of<LocalizationProvider>(context, listen: false);
-         
+         String msg = t.t('status_updated') ?? "Status updated";
+
          if (action == 'start') msg = t.t('job_started');
          else if (action == 'complete') {
              _poller?.cancel();
              _disconnectStream();
              // IMPORTANT: "Complete Trip" means driver is done. Job might be pending admin review.
-             msg = "Trip Completed";
+             msg = t.t('trip_completed') ?? "Trip Completed";
              // Show the driver their settlement breakdown ("here is what we
              // owe you for this trip") before bouncing to NoJobPage. Mirrors
              // the dispatcher's CompleteJobModal on the web. Failure to fetch
@@ -1013,7 +1096,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                          context,
                          settlement: Map<String, dynamic>.from(sRes.data as Map),
                          jobTitle: _job['title']?.toString(),
-                         okLabel: 'Done',
+                         okLabel: t.t('settlement_done') ?? 'Done',
                      );
                  }
              } catch (e) {
@@ -1072,10 +1155,14 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: snackColor));
          _fetchDashboardData(); 
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(response.data['message'] ?? "Action failed")));
+        final t2 = Provider.of<LocalizationProvider>(context, listen: false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(response.data['message'] ?? (t2.t('action_failed') ?? "Action failed"))));
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      if (mounted) {
+        final t2 = Provider.of<LocalizationProvider>(context, listen: false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${t2.t('error_prefix') ?? 'Error'}: $e')));
+      }
     } finally {
       if (mounted) setState(() => _isActionLoading = false);
     }

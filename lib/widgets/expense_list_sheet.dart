@@ -319,24 +319,30 @@ class _ExpenseListSheetState extends State<ExpenseListSheet>
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: sourceColor.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: sourceColor.withOpacity(0.3), width: 0.8),
-                          ),
-                          child: Text(
-                            sourceLabel,
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.4,
-                              color: sourceColor,
+                        // Source pill is informational only for auto-imported
+                        // entries (Card / FASTag / Parivahan). Manual is the
+                        // default for driver-submitted expenses, so labelling
+                        // every row "Manual" is noise — hide it.
+                        if (source != 'manual') ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: sourceColor.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: sourceColor.withOpacity(0.3), width: 0.8),
+                            ),
+                            child: Text(
+                              sourceLabel,
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.4,
+                                color: sourceColor,
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 4),

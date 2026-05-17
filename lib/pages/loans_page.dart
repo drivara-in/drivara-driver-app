@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:drivara_driver_app/api_config.dart';
+import 'package:drivara_driver_app/providers/localization_provider.dart';
 
 // Read-only loans for the signed-in driver. Backed by:
 //   GET /api/driver/me/loans
@@ -46,13 +48,27 @@ String _fmtShortDate(dynamic v) {
   try { return _shortDateFmt.format(DateTime.parse(v.toString()).toLocal()); } catch (_) { return v.toString(); }
 }
 
-String _prettyPlanType(String? type) {
+// Postgres returns numeric columns as JSON strings via node-pg's default type
+// parser ("1500.00" rather than 1500). A blunt `as num` cast throws TypeError
+// at runtime — so go through tryParse, which handles both shapes.
+double _toDouble(dynamic v) => double.tryParse('${v ?? 0}') ?? 0;
+int _toInt(dynamic v) => int.tryParse('${v ?? 0}') ?? 0;
+
+String _prettyPlanType(LocalizationProvider t, String? type) {
   switch (type) {
-    case 'emi': return 'EMI';
-    case 'no_cost_emi': return 'No-Cost EMI';
-    case 'interest_only': return 'Interest Only';
+    case 'emi': return t.t('loan_plan_emi') ?? 'EMI';
+    case 'no_cost_emi': return t.t('loan_plan_no_cost_emi') ?? 'No-Cost EMI';
+    case 'interest_only': return t.t('loan_plan_interest_only') ?? 'Interest Only';
     default: return type ?? '—';
   }
+}
+
+String _statusLabel(LocalizationProvider t, String? status) {
+  if (status == null) return '—';
+  final key = 'loan_status_$status';
+  final v = t.t(key);
+  if (v != null) return v;
+  return status.toUpperCase();
 }
 
 ({Color color, Color background}) _statusColors(String? status) {
@@ -106,8 +122,10 @@ class _LoansPageState extends State<LoansPage> {
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
+      final t = Provider.of<LocalizationProvider>(context, listen: false);
       setState(() {
-        _error = 'Could not load loans. Pull to retry.';
+        _error = t.t('loans_load_error') ?? 'Could not load loans. Pull to retry.';
         _loading = false;
       });
     }
@@ -115,16 +133,17 @@ class _LoansPageState extends State<LoansPage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = Provider.of<LocalizationProvider>(context);
     final activeLoans = _loans.where((l) => l['status'] == 'active').toList();
     final totalOutstanding = activeLoans.fold<double>(
       0,
-      (sum, l) => sum + ((l['outstanding_principal'] as num?)?.toDouble() ?? 0),
+      (sum, l) => sum + _toDouble(l['outstanding_principal']),
     );
-    final hasOverdue = _loans.any((l) => ((l['overdue_count'] ?? 0) as num) > 0);
+    final hasOverdue = _loans.any((l) => _toInt(l['overdue_count']) > 0);
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(title: const Text('My Loans'), elevation: 0),
+      appBar: AppBar(title: Text(t.t('loans_title') ?? 'My Loans'), elevation: 0),
       body: RefreshIndicator(
         onRefresh: _fetch,
         child: CustomScrollView(
@@ -132,6 +151,7 @@ class _LoansPageState extends State<LoansPage> {
           slivers: [
             SliverToBoxAdapter(
               child: _hero(
+                t: t,
                 outstanding: totalOutstanding,
                 activeCount: activeLoans.length,
                 totalCount: _loans.length,
@@ -145,10 +165,10 @@ class _LoansPageState extends State<LoansPage> {
             else if (_loans.isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
-                child: _emptyState(context, Icons.account_balance_outlined, 'No loans on file.'),
+                child: _emptyState(context, Icons.account_balance_outlined, t.t('loans_empty') ?? 'No loans on file.'),
               )
             else ...[
-              SliverToBoxAdapter(child: _sectionHeader(context, 'YOUR LOANS', _loans.length)),
+              SliverToBoxAdapter(child: _sectionHeader(context, t.t('loans_section_your_loans') ?? 'YOUR LOANS', _loans.length)),
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                 sliver: SliverList.separated(
@@ -165,6 +185,7 @@ class _LoansPageState extends State<LoansPage> {
   }
 
   Widget _hero({
+    required LocalizationProvider t,
     required double outstanding,
     required int activeCount,
     required int totalCount,
@@ -196,9 +217,9 @@ class _LoansPageState extends State<LoansPage> {
                     color: Colors.white.withOpacity(0.20),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Text(
-                    'OUTSTANDING BALANCE',
-                    style: TextStyle(
+                  child: Text(
+                    t.t('loans_outstanding_balance') ?? 'OUTSTANDING BALANCE',
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 10,
                       fontWeight: FontWeight.w800,
@@ -238,7 +259,7 @@ class _LoansPageState extends State<LoansPage> {
                   child: _heroStat(
                     Icons.bolt_rounded,
                     activeCount.toString(),
-                    activeCount == 1 ? 'active' : 'active',
+                    t.t('loans_active') ?? 'active',
                   ),
                 ),
                 Container(width: 1, height: 32, color: Colors.white.withOpacity(0.18)),
@@ -246,7 +267,9 @@ class _LoansPageState extends State<LoansPage> {
                   child: _heroStat(
                     Icons.layers_outlined,
                     totalCount.toString(),
-                    totalCount == 1 ? 'total loan' : 'total loans',
+                    totalCount == 1
+                        ? (t.t('loans_total_loan_one') ?? 'total loan')
+                        : (t.t('loans_total_loans') ?? 'total loans'),
                   ),
                 ),
               ],
@@ -347,17 +370,19 @@ class _LoanSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final amount = (loan['amount'] as num?)?.toDouble() ?? 0;
-    final outstanding = (loan['outstanding_principal'] as num?)?.toDouble() ?? 0;
+    final t = Provider.of<LocalizationProvider>(context);
+    final amount = _toDouble(loan['amount']);
+    final outstanding = _toDouble(loan['outstanding_principal']);
     final paid = (amount - outstanding).clamp(0, amount).toDouble();
     final progress = amount > 0 ? (paid / amount).clamp(0.0, 1.0) : 0.0;
 
     final status = loan['status']?.toString();
     final colors = _statusColors(status);
     final purpose = (loan['purpose']?.toString() ?? '').trim();
-    final next = loan['next_installment'] as Map<String, dynamic>?;
-    final overdue = ((loan['overdue_count'] ?? 0) as num).toInt();
-    final planType = _prettyPlanType(loan['plan_type']?.toString());
+    final rawNext = loan['next_installment'];
+    final next = rawNext is Map ? Map<String, dynamic>.from(rawNext) : null;
+    final overdue = _toInt(loan['overdue_count']);
+    final planType = _prettyPlanType(t, loan['plan_type']?.toString());
 
     return Material(
       color: Theme.of(context).cardTheme.color ?? Theme.of(context).colorScheme.surface,
@@ -418,7 +443,7 @@ class _LoanSummaryCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      (status ?? '—').toUpperCase(),
+                      _statusLabel(t, status),
                       style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: colors.color, letterSpacing: 0.5),
                     ),
                   ),
@@ -432,7 +457,7 @@ class _LoanSummaryCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('OUTSTANDING',
+                        Text(t.t('loans_outstanding') ?? 'OUTSTANDING',
                             style: TextStyle(
                               fontSize: 9,
                               fontWeight: FontWeight.w700,
@@ -455,7 +480,7 @@ class _LoanSummaryCard extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text('DISBURSED',
+                      Text(t.t('loans_disbursed') ?? 'DISBURSED',
                           style: TextStyle(
                             fontSize: 9,
                             fontWeight: FontWeight.w700,
@@ -489,7 +514,10 @@ class _LoanSummaryCard extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                '${_currency0.format(paid)} paid of ${_currency0.format(amount)} (${(progress * 100).toStringAsFixed(0)}%)',
+                (t.t('loans_paid_of_template') ?? '{paid} paid of {total} ({pct}%)')
+                    .replaceFirst('{paid}', _currency0.format(paid))
+                    .replaceFirst('{total}', _currency0.format(amount))
+                    .replaceFirst('{pct}', (progress * 100).toStringAsFixed(0)),
                 style: TextStyle(fontSize: 11, color: Theme.of(context).textTheme.bodySmall?.color),
               ),
               if (next != null) ...[
@@ -513,7 +541,9 @@ class _LoanSummaryCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              overdue > 0 ? '$overdue overdue' : 'Next installment',
+                              overdue > 0
+                                  ? (t.t('loans_overdue_count') ?? '{n} overdue').replaceFirst('{n}', '$overdue')
+                                  : (t.t('loans_next_installment') ?? 'Next installment'),
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
@@ -522,7 +552,9 @@ class _LoanSummaryCard extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              '${_fmtAmount0(next['total_due'])} due ${_fmtShortDate(next['due_date'])}',
+                              (t.t('loans_due_amount_date') ?? '{amount} due {date}')
+                                  .replaceFirst('{amount}', _fmtAmount0(next['total_due']))
+                                  .replaceFirst('{date}', _fmtShortDate(next['due_date'])),
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
@@ -576,8 +608,10 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
+      final t = Provider.of<LocalizationProvider>(context, listen: false);
       setState(() {
-        _error = 'Could not load loan. Pull to retry.';
+        _error = t.t('loan_detail_load_error') ?? 'Could not load loan. Pull to retry.';
         _loading = false;
       });
     }
@@ -585,9 +619,10 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = Provider.of<LocalizationProvider>(context);
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(title: const Text('Loan Detail'), elevation: 0),
+      appBar: AppBar(title: Text(t.t('loans_detail_title') ?? 'Loan Detail'), elevation: 0),
       body: RefreshIndicator(
         onRefresh: _fetch,
         child: _loading
@@ -600,11 +635,12 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
   }
 
   Widget _buildBody(BuildContext context) {
+    final t = Provider.of<LocalizationProvider>(context);
     final loan = _loan!;
-    final amount = (loan['amount'] as num?)?.toDouble() ?? 0;
-    final outstanding = (loan['outstanding_principal'] as num?)?.toDouble() ?? 0;
-    final totalPaid = (loan['total_paid'] as num?)?.toDouble() ?? 0;
-    final interestPaid = (loan['total_interest_paid'] as num?)?.toDouble() ?? 0;
+    final amount = _toDouble(loan['amount']);
+    final outstanding = _toDouble(loan['outstanding_principal']);
+    final totalPaid = _toDouble(loan['total_paid']);
+    final interestPaid = _toDouble(loan['total_interest_paid']);
     final rate = loan['interest_rate'];
     final progress = amount > 0 ? ((amount - outstanding) / amount).clamp(0.0, 1.0) : 0.0;
 
@@ -613,7 +649,7 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
     final purpose = (loan['purpose']?.toString() ?? '').trim();
     final notes = (loan['notes']?.toString() ?? '').trim();
     final status = loan['status']?.toString();
-    final planType = _prettyPlanType(loan['plan_type']?.toString());
+    final planType = _prettyPlanType(t, loan['plan_type']?.toString());
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -661,7 +697,7 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      (status ?? '—').toUpperCase(),
+                      _statusLabel(t, status),
                       style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5),
                     ),
                   ),
@@ -673,7 +709,8 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Text(purpose, style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500)),
                 ),
-              const Text('Outstanding', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
+              Text(t.t('loans_outstanding_label') ?? 'Outstanding',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
               const SizedBox(height: 2),
               FittedBox(
                 fit: BoxFit.scaleDown,
@@ -701,7 +738,9 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
               ),
               const SizedBox(height: 6),
               Text(
-                '${(progress * 100).toStringAsFixed(0)}% paid · ${_currency0.format(amount)} disbursed',
+                (t.t('loans_paid_pct_template') ?? '{pct}% paid · {amount} disbursed')
+                    .replaceFirst('{pct}', (progress * 100).toStringAsFixed(0))
+                    .replaceFirst('{amount}', _currency0.format(amount)),
                 style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600),
               ),
             ],
@@ -710,17 +749,17 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
         const SizedBox(height: 16),
         Row(
           children: [
-            Expanded(child: _statTile(context, 'Paid', _fmtAmount0(totalPaid), Icons.check_circle_outline)),
+            Expanded(child: _statTile(context, t.t('loans_stat_paid') ?? 'Paid', _fmtAmount0(totalPaid), Icons.check_circle_outline)),
             const SizedBox(width: 10),
-            Expanded(child: _statTile(context, 'Interest', _fmtAmount0(interestPaid), Icons.percent_rounded)),
+            Expanded(child: _statTile(context, t.t('loans_stat_interest') ?? 'Interest', _fmtAmount0(interestPaid), Icons.percent_rounded)),
           ],
         ),
         const SizedBox(height: 10),
         Row(
           children: [
-            Expanded(child: _statTile(context, 'Rate', rate != null ? '$rate%' : '—', Icons.trending_up_rounded)),
+            Expanded(child: _statTile(context, t.t('loans_stat_rate') ?? 'Rate', rate != null ? '$rate%' : '—', Icons.trending_up_rounded)),
             const SizedBox(width: 10),
-            Expanded(child: _statTile(context, 'Started', _fmtDate(loan['start_date']), Icons.event_outlined)),
+            Expanded(child: _statTile(context, t.t('loans_stat_started') ?? 'Started', _fmtDate(loan['start_date']), Icons.event_outlined)),
           ],
         ),
         if (notes.isNotEmpty) ...[
@@ -735,7 +774,7 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('NOTES', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.0, color: Theme.of(context).hintColor)),
+                Text(t.t('loans_section_notes') ?? 'NOTES', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.0, color: Theme.of(context).hintColor)),
                 const SizedBox(height: 4),
                 Text(notes, style: const TextStyle(fontSize: 13)),
               ],
@@ -743,25 +782,25 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
           ),
         ],
         const SizedBox(height: 22),
-        _sectionTitle(context, 'SCHEDULE', installments.length),
+        _sectionTitle(context, t.t('loans_section_schedule') ?? 'SCHEDULE', installments.length),
         const SizedBox(height: 8),
         if (installments.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text('No installments.', style: TextStyle(color: Theme.of(context).hintColor)),
+            child: Text(t.t('loans_no_installments') ?? 'No installments.', style: TextStyle(color: Theme.of(context).hintColor)),
           )
         else
-          ...installments.map((inst) => _InstallmentRow(inst: inst as Map<String, dynamic>)),
+          ...installments.whereType<Map>().map((inst) => _InstallmentRow(inst: Map<String, dynamic>.from(inst))),
         const SizedBox(height: 22),
-        _sectionTitle(context, 'PAYMENTS', payments.length),
+        _sectionTitle(context, t.t('loans_section_payments') ?? 'PAYMENTS', payments.length),
         const SizedBox(height: 8),
         if (payments.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text('No payments recorded.', style: TextStyle(color: Theme.of(context).hintColor)),
+            child: Text(t.t('loans_no_payments') ?? 'No payments recorded.', style: TextStyle(color: Theme.of(context).hintColor)),
           )
         else
-          ...payments.map((p) => _PaymentRow(payment: p as Map<String, dynamic>)),
+          ...payments.whereType<Map>().map((p) => _PaymentRow(payment: Map<String, dynamic>.from(p))),
       ],
     );
   }
@@ -836,6 +875,7 @@ class _InstallmentRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = Provider.of<LocalizationProvider>(context);
     final status = inst['status']?.toString();
     final colors = _statusColors(status);
     final no = inst['installment_no']?.toString() ?? '?';
@@ -866,7 +906,7 @@ class _InstallmentRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(amount, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, fontFeatures: [FontFeature.tabularFigures()])),
-                  Text('Due $dueDate', style: TextStyle(fontSize: 11, color: Theme.of(context).textTheme.bodySmall?.color)),
+                  Text('${t.t('loans_due') ?? 'Due'} $dueDate', style: TextStyle(fontSize: 11, color: Theme.of(context).textTheme.bodySmall?.color)),
                 ],
               ),
             ),
@@ -874,7 +914,7 @@ class _InstallmentRow extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(color: colors.background, borderRadius: BorderRadius.circular(8)),
               child: Text(
-                (status ?? '—').toUpperCase(),
+                _statusLabel(t, status),
                 style: TextStyle(color: colors.color, fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 0.5),
               ),
             ),
@@ -895,7 +935,8 @@ class _PaymentRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final type = payment['payment_type']?.toString().toUpperCase() ?? 'PAYMENT';
+    final t = Provider.of<LocalizationProvider>(context);
+    final type = payment['payment_type']?.toString().toUpperCase() ?? (t.t('loans_payment_fallback') ?? 'PAYMENT');
     final mode = payment['payment_mode']?.toString();
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
