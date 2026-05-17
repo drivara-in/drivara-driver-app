@@ -23,7 +23,6 @@ import 'package:drivara_driver_app/services/behavior_service.dart';
 import 'package:drivara_driver_app/services/separation_service.dart';
 import 'package:drivara_driver_app/services/messaging_service.dart';
 import 'package:drivara_driver_app/pages/tyre_management_page.dart';
-import 'package:drivara_driver_app/pages/earnings_page.dart';
 import 'package:drivara_driver_app/pages/settlement_sheet.dart';
 import 'package:drivara_driver_app/pages/profile_page.dart';
 import 'leaderboard_page.dart';
@@ -1654,23 +1653,12 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                         child: const Icon(Icons.local_shipping, color: Colors.white),
                    ),
 
-                   // Loans tile moved into the Profile screen — accessible
-                   // from the Profile icon in the toolbar. Removing the FAB
-                   // here so the action column doesn't repeat the same entry.
-
-                   // Earnings — always visible; the driver should be able
-                   // to check what they've made over a period at any time.
-                   const SizedBox(height: 12),
-                   FloatingActionButton(
-                     heroTag: "earningsBtn",
-                     onPressed: () {
-                       Navigator.push(context, MaterialPageRoute(builder: (_) => const EarningsPage()));
-                     },
-                     mini: true,
-                     backgroundColor: Colors.green.shade700,
-                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                     child: const Icon(Icons.payments, color: Colors.white),
-                   ),
+                   // Loans + Earnings both live in the Profile screen now —
+                   // the FAB column on the active-job page was getting tall
+                   // enough that the bottommost icon slid behind the Vehicle-
+                   // Locator banner ("TOO FAR FROM TRUCK") and became
+                   // unreachable. Profile keeps both entries accessible via
+                   // the avatar in the toolbar.
 
                 ],
               ),

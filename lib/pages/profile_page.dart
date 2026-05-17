@@ -4,6 +4,7 @@ import 'package:drivara_driver_app/api_config.dart';
 import 'package:drivara_driver_app/login_page.dart';
 import 'package:drivara_driver_app/services/messaging_service.dart';
 import 'package:drivara_driver_app/pages/loans_page.dart';
+import 'package:drivara_driver_app/pages/earnings_page.dart';
 
 // Driver Profile — single place for the driver's licence, the vehicle on
 // their currently-active job (RC), a Loans tile, and a destructive Logout.
@@ -129,8 +130,18 @@ class _ProfilePageState extends State<ProfilePage> {
           const SizedBox(height: 16),
           Center(child: _RCCard(vehicle: vehicle)),
         ],
+        const SizedBox(height: 16),
+        Card(
+          child: ListTile(
+            leading: Icon(Icons.payments, color: Colors.green.shade700),
+            title: const Text('My Earnings', style: TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: const Text('Salary from completed trips'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EarningsPage())),
+          ),
+        ),
         if (loanCount > 0) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
           Card(
             child: ListTile(
               leading: const Icon(Icons.account_balance),
