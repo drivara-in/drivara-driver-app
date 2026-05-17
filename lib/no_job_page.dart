@@ -5,6 +5,7 @@ import 'api_config.dart';
 import 'login_page.dart';
 import 'active_job_page.dart';
 import 'leaderboard_page.dart';
+import 'pages/earnings_page.dart';
 import 'theme/app_theme.dart';
 import 'package:provider/provider.dart';
 import 'providers/localization_provider.dart';
@@ -97,6 +98,25 @@ class _NoJobPageState extends State<NoJobPage> with WidgetsBindingObserver {
                 style: AppTextStyles.body,
               ),
               const SizedBox(height: 48),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const EarningsPage()),
+                    );
+                  },
+                  icon: const Icon(Icons.payments),
+                  label: const Text('My Earnings'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: Colors.green.shade700,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(

@@ -24,6 +24,8 @@ import 'package:drivara_driver_app/services/separation_service.dart';
 import 'package:drivara_driver_app/services/messaging_service.dart';
 import 'package:drivara_driver_app/pages/tyre_management_page.dart';
 import 'package:drivara_driver_app/pages/loans_page.dart';
+import 'package:drivara_driver_app/pages/earnings_page.dart';
+import 'package:drivara_driver_app/pages/settlement_sheet.dart';
 import 'leaderboard_page.dart';
 import 'api_config.dart';
 import 'providers/localization_provider.dart';
@@ -1000,7 +1002,27 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
              _poller?.cancel();
              _disconnectStream();
              // IMPORTANT: "Complete Trip" means driver is done. Job might be pending admin review.
-             msg = "Trip Completed"; 
+             msg = "Trip Completed";
+             // Show the driver their settlement breakdown ("here is what we
+             // owe you for this trip") before bouncing to NoJobPage. Mirrors
+             // the dispatcher's CompleteJobModal on the web. Failure to fetch
+             // is silently swallowed — Complete is the user-critical action,
+             // the sheet is a nicety. Sheet uses the driver's role + split
+             // share from /api/driver/jobs/:jobId/settlement.
+             try {
+                 final sRes = await ApiConfig.dio.get('/driver/jobs/${_job['id']}/settlement');
+                 if (mounted && sRes.data is Map) {
+                     await showSettlementSheet(
+                         context,
+                         settlement: Map<String, dynamic>.from(sRes.data as Map),
+                         jobTitle: _job['title']?.toString(),
+                         okLabel: 'Done',
+                     );
+                 }
+             } catch (e) {
+                 debugPrint('[settlement] fetch failed after complete: $e');
+             }
+             if (!mounted) return;
              Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const NoJobPage()));
              return;
          }
@@ -1649,6 +1671,20 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                        child: const Icon(Icons.account_balance, color: Colors.white),
                      ),
                    ],
+
+                   // 8. Earnings — always visible; the driver should be able
+                   // to check what they've made over a period at any time.
+                   const SizedBox(height: 12),
+                   FloatingActionButton(
+                     heroTag: "earningsBtn",
+                     onPressed: () {
+                       Navigator.push(context, MaterialPageRoute(builder: (_) => const EarningsPage()));
+                     },
+                     mini: true,
+                     backgroundColor: Colors.green.shade700,
+                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                     child: const Icon(Icons.payments, color: Colors.white),
+                   ),
 
                 ],
               ),
