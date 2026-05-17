@@ -2070,9 +2070,24 @@ class LocalizationProvider extends ChangeNotifier {
   };
 
   String t(String key) {
-    if (_localizedStrings[_locale.languageCode]!.containsKey(key)) {
-      return _localizedStrings[_locale.languageCode]![key]!;
+    // 1. Current locale.
+    final loc = _localizedStrings[_locale.languageCode];
+    if (loc != null && loc.containsKey(key)) {
+      return loc[key]!;
     }
+    // 2. English fallback — every key in this file is authored in English
+    // first; non-English locales accrete translations over time. Without
+    // this fallback, a missing-in-Hindi key leaks the raw snake_case
+    // identifier (e.g. "complete_action") onto the driver's screen instead
+    // of an actual word. Falling back to English gives a usable label until
+    // someone gets around to translating it.
+    final en = _localizedStrings['en'];
+    if (en != null && en.containsKey(key)) {
+      return en[key]!;
+    }
+    // 3. Last-resort: the key itself. Should only fire for genuinely
+    // undefined keys (callers' `?? 'fallback'` patterns still take over
+    // when they wrap the call), but logging it makes the gap discoverable.
     return key;
   }
 
