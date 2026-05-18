@@ -38,6 +38,7 @@ class LocalizationProvider extends ChangeNotifier {
     'en': {
       'login_title': 'Drivara Driver',
       'login_subtitle': 'Enter your number to login',
+      'login_terms_privacy': 'By continuing, you agree to our Terms & Privacy Policy.',
       'phone_hint': 'Mobile Number',
       'get_started': 'Get Started',
       'verify_otp': 'Verify & Login',
@@ -439,6 +440,7 @@ class LocalizationProvider extends ChangeNotifier {
 
       'login_title': 'Drivara Driver',
       'login_subtitle': 'लॉगिन करने के लिए अपना नंबर दर्ज करें',
+      'login_terms_privacy': 'जारी रखकर, आप हमारी सेवा शर्तें और गोपनीयता नीति से सहमत हैं।',
       'phone_hint': 'मोबाइल नंबर',
       'get_started': 'शुरू करें',
       'verify_otp': 'सत्यापित करें और लॉगिन करें',
@@ -834,6 +836,7 @@ class LocalizationProvider extends ChangeNotifier {
 
       'login_title': 'Drivara Driver',
       'login_subtitle': 'Enter your number to login',
+      'login_terms_privacy': 'కొనసాగించడం ద్వారా, మీరు మా నిబంధనలు మరియు గోప్యతా విధానానికి అంగీకరిస్తున్నారు.',
       'phone_hint': 'మొబైల్ నంబర్',
       'get_started': 'ప్రారంభించండి',
       'verify_otp': 'Verify & Login',
@@ -1231,6 +1234,7 @@ class LocalizationProvider extends ChangeNotifier {
 
       'login_title': 'Drivara Driver',
       'login_subtitle': 'Enter your number to login',
+      'login_terms_privacy': 'തുടരുന്നതിലൂടെ, ഞങ്ങളുടെ നിബന്ധനകളും സ്വകാര്യതാ നയവും അംഗീകരിക്കുന്നു.',
       'phone_hint': 'മൊബൈൽ നമ്പർ',
       'get_started': 'തുടങ്ങുക',
       'verify_otp': 'Verify & Login',
@@ -1629,6 +1633,7 @@ class LocalizationProvider extends ChangeNotifier {
 
       'login_title': 'Drivara Driver',
       'login_subtitle': 'Enter your number to login',
+      'login_terms_privacy': 'ಮುಂದುವರಿಸುವ ಮೂಲಕ, ನೀವು ನಮ್ಮ ನಿಯಮಗಳು ಮತ್ತು ಗೌಪ್ಯತೆ ನೀತಿಯನ್ನು ಒಪ್ಪಿಕೊಳ್ಳುತ್ತೀರಿ.',
       'phone_hint': 'ಮೊಬೈಲ್ ಸಂಖ್ಯೆ',
       'get_started': 'ಪ್ರಾರಂಭಿಸಿ',
       'verify_otp': 'Verify & Login',
@@ -2026,6 +2031,7 @@ class LocalizationProvider extends ChangeNotifier {
 
       'login_title': 'Drivara Driver',
       'login_subtitle': 'Enter your number to login',
+      'login_terms_privacy': 'தொடர்வதன் மூலம், எங்கள் விதிமுறைகள் மற்றும் தனியுரிமைக் கொள்கையை ஏற்கிறீர்கள்.',
       'phone_hint': 'மொபைல் எண்',
       'get_started': 'தொடங்கவும்',
       'verify_otp': 'Verify & Login',

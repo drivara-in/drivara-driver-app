@@ -218,7 +218,7 @@ class _LoginPageState extends State<LoginPage> {
                       const SizedBox(height: 24),
                        Center(
                         child: Text(
-                          'By continuing, you agree to our Terms & Privacy Policy.',
+                          t.t('login_terms_privacy') ?? 'By continuing, you agree to our Terms & Privacy Policy.',
                           textAlign: TextAlign.center,
                           style: AppTextStyles.label.copyWith(color: Theme.of(context).textTheme.bodySmall?.color),
                         ),
