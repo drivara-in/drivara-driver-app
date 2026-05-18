@@ -1757,7 +1757,12 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
             //     scrollable content.
             Positioned(
               left: 16,
-              right: 16,
+              // right: 72 keeps the banner clear of the right-side FAB
+              // column (FABs are mini, 40 px wide, anchored at right:16,
+              // so they occupy the rightmost 56 px). The banner sat at
+              // right:16 originally and slid behind the tyre-management
+              // FAB on shorter phones. 72 leaves a 16 px gap.
+              right: 72,
               // Anchor to the sheet's INITIAL height (0.45), not the
               // min (0.40). Otherwise the sheet's top edge covers the
               // banner on app open — the user only sees the banner if
