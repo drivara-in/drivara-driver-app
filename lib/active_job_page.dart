@@ -1779,11 +1779,27 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
             ),
 
             // 4. Draggable Sheet
-            DraggableScrollableSheet(
-              initialChildSize: 0.45,
-              minChildSize: 0.40,
-              maxChildSize: 0.88, // Stops just below header for "Merge" effect
-              snap: true,
+            // When the navigate-to-truck (or fuel-proximity) banner is
+            // visible we shrink the sheet's initial height so its top
+            // edge lands just below the banner. Banner sits at top:446
+            // with ~80 px height, so banner_bottom_y ≈ 526; we want
+            // sheet top ≈ 540 for a 14 px gap. Translate that into a
+            // fraction-of-screen for DraggableScrollableSheet. When no
+            // banner, keep the default 0.45.
+            Builder(builder: (context) {
+              final showBanner = _shouldShowVehicleLocator()
+                  || (_fuelProxKm != null && _fuelProxKm! <= 5.0 && _fuelProxStop != null);
+              final screenH = MediaQuery.of(context).size.height;
+              final initialSize = showBanner
+                  ? ((screenH - 540) / screenH).clamp(0.30, 0.55)
+                  : 0.45;
+              final minSize = initialSize < 0.40 ? initialSize : 0.40;
+              return DraggableScrollableSheet(
+                key: ValueKey('sheet_${initialSize.toStringAsFixed(2)}'),
+                initialChildSize: initialSize,
+                minChildSize: minSize,
+                maxChildSize: 0.88, // Stops just below header for "Merge" effect
+                snap: true,
               builder: (context, scrollController) {
                 return Container(
                     decoration: BoxDecoration(
@@ -2396,7 +2412,8 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                   ),
                 );
               }
-            ),
+            );
+            }),
 
 
 
