@@ -95,7 +95,12 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
   // the screen height). Used to fade the floating banner stack as the
   // sheet expands so the banner doesn't end up covered by the sheet's
   // scrollable content.
-  double _sheetFraction = 0.35;
+  double _sheetFraction = 0.45;
+  // The sheet animates from 0 → initialChildSize on app launch. If the
+  // banner was visible during that ramp it'd flash on screen and then
+  // disappear under the rising sheet — looks janky. Suppress the
+  // banner until the landing animation has settled.
+  bool _sheetSettled = false;
 
   // Unplanned stoppage state
   DateTime? _unplannedStopSince;
@@ -139,6 +144,14 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     _connectStream();
     _initFuelChime();
     _initDriverGps();
+
+    // Banner stays hidden for the first ~600 ms while the
+    // DraggableScrollableSheet animates up to its initial size.
+    // Without this the banner flashes on the map and then disappears
+    // under the rising sheet — looks janky.
+    Future.delayed(const Duration(milliseconds: 650), () {
+      if (mounted) setState(() => _sheetSettled = true);
+    });
   }
 
   Future<void> _initDriverGps() async {
@@ -1760,17 +1773,20 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
             // 3a. Floating banners stack — fuel proximity (amber/red) +
             //     vehicle locator (blue). Non-scrollable, behind the
             //     bottom sheet. Anchored below the FAB column at
-            //     top: 500. Fade kicks in as the sheet expands past
-            //     0.42 so the banner stays out of the sheet's scroll
-            //     area when the driver opens the trip details.
+            //     top: 500. Hidden at the sheet's default 0.45 size
+            //     (sheet sits on top, banner peeks through only when
+            //     the driver pulls the sheet down toward 0.40 min).
+            //     Also suppressed during the initial landing
+            //     animation so it doesn't flash on screen.
             (() {
-              const fadeStart = 0.42;
-              const fadeEnd = 0.50;
-              final opacity = _sheetFraction <= fadeStart
+              const fadeStart = 0.40; // visible at sheet ≤ 0.40 (min)
+              const fadeEnd = 0.43;   // hidden by sheet at default 0.45
+              final rawOpacity = _sheetFraction <= fadeStart
                   ? 1.0
                   : _sheetFraction >= fadeEnd
                       ? 0.0
                       : 1.0 - ((_sheetFraction - fadeStart) / (fadeEnd - fadeStart));
+              final opacity = _sheetSettled ? rawOpacity : 0.0;
               return Positioned(
                 left: 16,
                 right: 16,
@@ -1807,14 +1823,8 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                 return false;
               },
               child: DraggableScrollableSheet(
-              // Open at 0.35 so the floating banner (vehicle locator
-              // when truck is far, fuel proximity when near) sits
-              // cleanly above the sheet on landing. Driver pulls up
-              // to see the rest of the trip details — works just like
-              // the previous 0.45 default, plus the banner is no
-              // longer half-covered by the sheet's rounded top.
-              initialChildSize: 0.35,
-              minChildSize: 0.30,
+              initialChildSize: 0.45,
+              minChildSize: 0.40,
               maxChildSize: 0.88, // Stops just below header for "Merge" effect
               snap: true,
               builder: (context, scrollController) {
