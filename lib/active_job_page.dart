@@ -2691,7 +2691,28 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
       }
     }
     final action = (next['action'] ?? 'fill_partial').toString();
-    final reason = (next['reason'] ?? '').toString();
+    // Localised primary reason. Server emits a `reasonCode` like
+    // r_partial_cheaper_ahead + a `reasonParams` map (e.g. {price: 92.5});
+    // we render that as a localised template. Older plans without these
+    // fields fall back to the server-built English `reason` text.
+    final reasonCode = (next['reasonCode'] ?? '').toString();
+    final reasonParamsRaw = next['reasonParams'];
+    final reasonParams = reasonParamsRaw is Map
+        ? Map<String, dynamic>.from(reasonParamsRaw)
+        : <String, dynamic>{};
+    final reasonFallback = (next['reason'] ?? '').toString();
+    String reason = reasonFallback;
+    if (reasonCode.isNotEmpty) {
+      final t = Provider.of<LocalizationProvider>(context, listen: false);
+      final tpl = t.t(reasonCode);
+      if (tpl != reasonCode) {
+        var rendered = tpl;
+        reasonParams.forEach((k, v) {
+          rendered = rendered.replaceAll('{$k}', v.toString());
+        });
+        reason = rendered;
+      }
+    }
     final remainingStops = stops.length > 1 ? stops.length - 1 : 0;
     final rangeKm = _parseNum(fuelPlan['currentRangeKm']);
     final currentFuelL = _parseNum(fuelPlan['currentFuelLiters']);
