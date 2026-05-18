@@ -1778,7 +1778,12 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                       : 1.0 - ((_sheetFraction - fadeStart) / (fadeEnd - fadeStart));
               return Positioned(
                 left: 16,
-                right: 16,
+                // Banner right edge stops short of the right-side FAB column
+                // (Leaderboard / Find Fuel / Add Expense / Tyre Management
+                // etc., each a 40 px mini FAB at right: 16). Without this
+                // the banner overlapped the tyre management icon on first
+                // open when the sheet sits at its 0.45 initial size.
+                right: 72,
                 bottom: MediaQuery.of(context).size.height * _sheetFraction + 12,
                 child: IgnorePointer(
                   ignoring: opacity < 0.05,
