@@ -1533,6 +1533,11 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                   job: _job,
                   vehicle: vehicle,
                   fuelStations: _fuelStations,
+                  // Tapping the truck marker pops the "navigate to truck"
+                  // sheet (distance + Navigate button). Replaces the old
+                  // floating vehicle-locator banner that ate screen real
+                  // estate above the bottom sheet.
+                  onVehicleTap: _showNavigateToTruckSheet,
                   // Feed the server's live fuel plan (stops) into the map so
                   // the driver sees orange pump markers at each planned refuel,
                   // not just the text card below.
@@ -2511,46 +2516,38 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
               ),
             ),
 
-            // 6. Floating banner stack — fuel proximity (amber/red) +
-            //    vehicle locator (blue). Rendered LAST in the Stack so
-            //    it visually sits on top of the sheet's rounded top
-            //    edge without being clipped. Hidden during the sheet's
-            //    landing animation (_sheetSettled), and fades out as
-            //    the user drags the sheet up past 0.50 so it doesn't
-            //    fight with the sheet's scroll area.
-            (() {
-              const fadeStart = 0.50;
-              const fadeEnd = 0.58;
-              final rawOpacity = _sheetFraction <= fadeStart
-                  ? 1.0
-                  : _sheetFraction >= fadeEnd
-                      ? 0.0
-                      : 1.0 - ((_sheetFraction - fadeStart) / (fadeEnd - fadeStart));
-              final opacity = _sheetSettled ? rawOpacity : 0.0;
-              return Positioned(
-                left: 16,
-                right: 16,
-                top: 446,
-                child: IgnorePointer(
-                  ignoring: opacity < 0.05,
-                  child: AnimatedOpacity(
-                    duration: const Duration(milliseconds: 120),
-                    opacity: opacity,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (_fuelProxKm != null && _fuelProxKm! <= 5.0 && _fuelProxStop != null) ...[
-                          _buildFuelProximityBanner(),
-                          const SizedBox(height: 8),
-                        ],
-                        if (_shouldShowVehicleLocator()) _buildVehicleLocatorBanner(),
-                      ],
+            // 6. Floating fuel-proximity banner — only shown when the
+            //    truck is within 5 km of a planned refuel pump. The
+            //    old vehicle-locator banner ("too far from truck") is
+            //    gone — that action moved to a bottom sheet that pops
+            //    when the driver taps the truck marker on the map.
+            //    Rendered LAST in the Stack so it z-orders above the
+            //    sheet's rounded top edge. Fades out as the user
+            //    drags the sheet up past 0.50.
+            if (_fuelProxKm != null && _fuelProxKm! <= 5.0 && _fuelProxStop != null)
+              (() {
+                const fadeStart = 0.50;
+                const fadeEnd = 0.58;
+                final rawOpacity = _sheetFraction <= fadeStart
+                    ? 1.0
+                    : _sheetFraction >= fadeEnd
+                        ? 0.0
+                        : 1.0 - ((_sheetFraction - fadeStart) / (fadeEnd - fadeStart));
+                final opacity = _sheetSettled ? rawOpacity : 0.0;
+                return Positioned(
+                  left: 16,
+                  right: 16,
+                  top: 446,
+                  child: IgnorePointer(
+                    ignoring: opacity < 0.05,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 120),
+                      opacity: opacity,
+                      child: _buildFuelProximityBanner(),
                     ),
                   ),
-                ),
-              );
-            })(),
+                );
+              })(),
           ],
         ),
     );
@@ -3335,6 +3332,138 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     final lng = double.tryParse(loc['lng'].toString()) ?? 0.0;
     if (lat == 0 && lng == 0) return null;
     return [lat, lng];
+  }
+
+  /// Bottom sheet that pops up when the driver taps the truck marker
+  /// on the map. Shows the live distance from the phone GPS to the
+  /// truck, with a "Navigate" button that hands off to Google/Apple
+  /// Maps. Replaces the old floating vehicle-locator banner that
+  /// crowded the screen on landing.
+  void _showNavigateToTruckSheet() {
+    final t = Provider.of<LocalizationProvider>(context, listen: false);
+    final v = _vehicleLatLng();
+    if (v == null) return;
+    final km = _driverPos == null
+        ? null
+        : _getHaversineDistance(_driverPos!.latitude, _driverPos!.longitude, v[0], v[1]);
+    final reg = (_dashboardData?['vehicle']?['registration_number']
+            ?? _job['vehicle_registration']
+            ?? _job['vehicle_name']
+            ?? t.t('vehicle_locator_title') ?? 'Vehicle')
+        .toString();
+    final isFar = km != null && km > 5.0;
+    final accent = isFar ? const Color(0xFFEF4444) : AppColors.primary;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).cardTheme.color,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final distLabel = km == null
+            ? '—'
+            : (km < 10
+                ? '${km.toStringAsFixed(1)} ${t.t('unit_km') ?? 'km'}'
+                : '${km.toStringAsFixed(0)} ${t.t('unit_km') ?? 'km'}');
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Drag handle.
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[400],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: accent.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(Icons.local_shipping, color: accent, size: 24),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            reg,
+                            style: GoogleFonts.inter(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Theme.of(context).textTheme.bodyLarge?.color,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            km == null
+                                ? (t.t('vehicle_locator_subtitle') ?? 'Tap Navigate to head to it')
+                                : '$distLabel ${t.t('away_suffix') ?? 'away'}',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: isFar
+                                  ? accent
+                                  : Theme.of(context).textTheme.bodySmall?.color,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      Navigator.of(ctx).pop();
+                      final fromLat = _driverPos?.latitude;
+                      final fromLng = _driverPos?.longitude;
+                      await _launchMapsNavigation(
+                        v[0],
+                        v[1],
+                        reg,
+                        originLat: fromLat,
+                        originLng: fromLng,
+                      );
+                    },
+                    icon: const Icon(Icons.directions),
+                    label: Text(
+                      t.t('action_navigate') ?? 'Navigate',
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accent,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   /// Banner shown when the driver is > 1 km from the vehicle (typical case:

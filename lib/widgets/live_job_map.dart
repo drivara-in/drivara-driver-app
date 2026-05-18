@@ -20,6 +20,7 @@ class LiveJobMap extends StatefulWidget {
     this.onFuelStationTap,
     this.plannedFuelStops,
     this.onPlannedFuelStopTap,
+    this.onVehicleTap,
   });
 
   final List<Map<String, dynamic>>? fuelStations;
@@ -29,6 +30,10 @@ class LiveJobMap extends StatefulWidget {
   /// action ('fill_full' | 'fill_partial'), distanceFromStartKm, etc.
   final List<Map<String, dynamic>>? plannedFuelStops;
   final Function(Map<String, dynamic>)? onPlannedFuelStopTap;
+  /// Fired when the driver taps the truck marker. Used to surface a
+  /// "distance to truck + Navigate" sheet — replaces the floating
+  /// vehicle-locator banner that used to sit at the top of the sheet.
+  final VoidCallback? onVehicleTap;
 
   @override
   State<LiveJobMap> createState() => _LiveJobMapState();
@@ -154,11 +159,16 @@ class _LiveJobMapState extends State<LiveJobMap> {
           markers.add(Marker(
             markerId: const MarkerId('vehicle'),
             position: vehiclePos,
-            rotation: heading, 
+            rotation: heading,
             icon: _vehicleIcon!,
             anchor: const Offset(0.5, 0.5),
             flat: true,
-            infoWindow: const InfoWindow(title: "My Truck"),
+            // No InfoWindow — taps go straight to the parent's handler,
+            // which surfaces a "distance + Navigate" bottom sheet.
+            consumeTapEvents: true,
+            onTap: () {
+              if (widget.onVehicleTap != null) widget.onVehicleTap!();
+            },
             zIndex: 2,
           ));
         }
