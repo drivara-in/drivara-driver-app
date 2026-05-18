@@ -1760,27 +1760,46 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
             ),
 
             // 3a. Floating banners stack — fuel proximity (amber/red) +
-            //     vehicle locator (blue), in that priority. Anchored
-            //     just above the draggable sheet so they never overlap
-            //     the scrollable content as the user drags the sheet
-            //     up and down. Bottom uses the live `_sheetFraction`
-            //     value updated by the NotificationListener below.
-            Positioned(
-              left: 16,
-              right: 16,
-              bottom: MediaQuery.of(context).size.height * _sheetFraction + 12,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_fuelProxKm != null && _fuelProxKm! <= 5.0 && _fuelProxStop != null) ...[
-                    _buildFuelProximityBanner(),
-                    const SizedBox(height: 8),
-                  ],
-                  if (_shouldShowVehicleLocator()) _buildVehicleLocatorBanner(),
-                ],
-              ),
-            ),
+            //     vehicle locator (blue). Anchored just above the
+            //     draggable sheet (`bottom = sheet edge + 12 px`) so
+            //     they never overlap its scrollable content. They also
+            //     fade out as the user expands the sheet — at min/
+            //     initial size (≤0.45) fully visible; by 0.55 they're
+            //     gone, freeing the map area for the user who actively
+            //     wants to see it. IgnorePointer kicks in when faded so
+            //     the banner can't swallow taps meant for icons below.
+            (() {
+              const fadeStart = 0.45;
+              const fadeEnd = 0.55;
+              final opacity = _sheetFraction <= fadeStart
+                  ? 1.0
+                  : _sheetFraction >= fadeEnd
+                      ? 0.0
+                      : 1.0 - ((_sheetFraction - fadeStart) / (fadeEnd - fadeStart));
+              return Positioned(
+                left: 16,
+                right: 16,
+                bottom: MediaQuery.of(context).size.height * _sheetFraction + 12,
+                child: IgnorePointer(
+                  ignoring: opacity < 0.05,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 120),
+                    opacity: opacity,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (_fuelProxKm != null && _fuelProxKm! <= 5.0 && _fuelProxStop != null) ...[
+                          _buildFuelProximityBanner(),
+                          const SizedBox(height: 8),
+                        ],
+                        if (_shouldShowVehicleLocator()) _buildVehicleLocatorBanner(),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            })(),
 
             // 4. Draggable Sheet — wrapped in a NotificationListener so
             //    the floating banners (above) can pin themselves to the
