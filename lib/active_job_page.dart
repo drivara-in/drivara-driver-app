@@ -1770,51 +1770,12 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
               ),
             ),
 
-            // 3a. Floating banners stack — fuel proximity (amber/red) +
-            //     vehicle locator (blue). Non-scrollable, behind the
-            //     bottom sheet. Anchored below the FAB column at
-            //     top: 500. Hidden at the sheet's default 0.45 size
-            //     (sheet sits on top, banner peeks through only when
-            //     the driver pulls the sheet down toward 0.40 min).
-            //     Also suppressed during the initial landing
-            //     animation so it doesn't flash on screen.
-            (() {
-              const fadeStart = 0.40; // visible at sheet ≤ 0.40 (min)
-              const fadeEnd = 0.43;   // hidden by sheet at default 0.45
-              final rawOpacity = _sheetFraction <= fadeStart
-                  ? 1.0
-                  : _sheetFraction >= fadeEnd
-                      ? 0.0
-                      : 1.0 - ((_sheetFraction - fadeStart) / (fadeEnd - fadeStart));
-              final opacity = _sheetSettled ? rawOpacity : 0.0;
-              return Positioned(
-                left: 16,
-                right: 16,
-                top: 500,
-                child: IgnorePointer(
-                  ignoring: opacity < 0.05,
-                  child: AnimatedOpacity(
-                    duration: const Duration(milliseconds: 120),
-                    opacity: opacity,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (_fuelProxKm != null && _fuelProxKm! <= 5.0 && _fuelProxStop != null) ...[
-                          _buildFuelProximityBanner(),
-                          const SizedBox(height: 8),
-                        ],
-                        if (_shouldShowVehicleLocator()) _buildVehicleLocatorBanner(),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            })(),
+            // (Floating banner moved further down — needs to render
+            //  AFTER the sheet so it visually sits on top of the
+            //  sheet's rounded corner area without being clipped.)
 
             // 4. Draggable Sheet — wrapped in a NotificationListener so
-            //    the floating banners (above) can pin themselves to the
-            //    sheet's live edge rather than a hard-coded offset.
+            //    the banner stack can react to the sheet's live edge.
             NotificationListener<DraggableScrollableNotification>(
               onNotification: (n) {
                 if ((n.extent - _sheetFraction).abs() > 0.005) {
@@ -2549,6 +2510,47 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                 ),
               ),
             ),
+
+            // 6. Floating banner stack — fuel proximity (amber/red) +
+            //    vehicle locator (blue). Rendered LAST in the Stack so
+            //    it visually sits on top of the sheet's rounded top
+            //    edge without being clipped. Hidden during the sheet's
+            //    landing animation (_sheetSettled), and fades out as
+            //    the user drags the sheet up past 0.50 so it doesn't
+            //    fight with the sheet's scroll area.
+            (() {
+              const fadeStart = 0.50;
+              const fadeEnd = 0.58;
+              final rawOpacity = _sheetFraction <= fadeStart
+                  ? 1.0
+                  : _sheetFraction >= fadeEnd
+                      ? 0.0
+                      : 1.0 - ((_sheetFraction - fadeStart) / (fadeEnd - fadeStart));
+              final opacity = _sheetSettled ? rawOpacity : 0.0;
+              return Positioned(
+                left: 16,
+                right: 16,
+                top: 446,
+                child: IgnorePointer(
+                  ignoring: opacity < 0.05,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 120),
+                    opacity: opacity,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (_fuelProxKm != null && _fuelProxKm! <= 5.0 && _fuelProxStop != null) ...[
+                          _buildFuelProximityBanner(),
+                          const SizedBox(height: 8),
+                        ],
+                        if (_shouldShowVehicleLocator()) _buildVehicleLocatorBanner(),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            })(),
           ],
         ),
     );
