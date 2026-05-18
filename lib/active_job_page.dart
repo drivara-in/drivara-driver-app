@@ -1760,11 +1760,15 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
               right: 16,
               // Anchor the banner BELOW the right-side FAB column so it
               // sits beneath the tyre-management icon instead of next
-              // to it. FAB column starts at top: 130 and has 6 mini
-              // FABs (40 px each + 5 × 12 px gaps = 300 px), ending at
-              // top: 430. Banner sits at top: 446 with 16 px breathing
-              // room and spans the map's full width.
-              top: 446,
+              // to it. FAB column starts at top: 130 and has 6 visible
+              // mini FABs. Mini FAB's visible 40 px is wrapped in a
+              // 48 px Material hit-target + a few pixels of shadow
+              // padding, so the column's effective bounding box is
+              // ~6 × 56 + 5 × 12 = 396 px. Adding the 130 px header
+              // offset, the column bottom lands near top: 530. Anchor
+              // banner at top: 548 — 18 px below the bottom-most FAB
+              // (tyre management) — across the map's full width.
+              top: 548,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1781,9 +1785,9 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
             // 4. Draggable Sheet
             // When the navigate-to-truck (or fuel-proximity) banner is
             // visible we shrink the sheet's initial height so its top
-            // edge lands just below the banner. Banner sits at top:446
-            // with ~80 px height, so banner_bottom_y ≈ 526; we want
-            // sheet top ≈ 540 for a 14 px gap. Translate that into a
+            // edge lands just below the banner. Banner sits at top:548
+            // with ~80 px height, so banner_bottom_y ≈ 628; we want
+            // sheet top ≈ 642 for a 14 px gap. Translate that into a
             // fraction-of-screen for DraggableScrollableSheet. When no
             // banner, keep the default 0.45.
             Builder(builder: (context) {
@@ -1791,7 +1795,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                   || (_fuelProxKm != null && _fuelProxKm! <= 5.0 && _fuelProxStop != null);
               final screenH = MediaQuery.of(context).size.height;
               final initialSize = showBanner
-                  ? ((screenH - 540) / screenH).clamp(0.30, 0.55)
+                  ? ((screenH - 642) / screenH).clamp(0.30, 0.55)
                   : 0.45;
               final minSize = initialSize < 0.40 ? initialSize : 0.40;
               return DraggableScrollableSheet(
