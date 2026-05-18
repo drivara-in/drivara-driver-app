@@ -113,6 +113,12 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
 
   JobStreamService? _streamService; // Retained as it's used in _connectStream
   final GlobalKey<dynamic> _mapKey = GlobalKey(); // Using dynamic to access state methods loosely or type it if possible
+  // Measured position of the right-side FAB column's bottom edge,
+  // populated after first layout. Used so the floating banner can
+  // sit a fixed gap below the tyre-management FAB regardless of
+  // how many FABs the column ends up rendering on this device.
+  final GlobalKey _fabColumnKey = GlobalKey();
+  double? _fabColumnBottomY;
   
   // Helper to safely parse numbers
   num? _parseNum(dynamic v) {
@@ -1460,6 +1466,22 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     final status = _job['status'] ?? 'scheduled';
     final isStarted = status == 'in_progress';
     final size = MediaQuery.of(context).size;
+
+    // Measure the right-side FAB column once after layout so the
+    // floating banner can pin its top to (column_bottom + 12)
+    // regardless of how many FABs render on this device. Guarded
+    // by an equality check to avoid an infinite rebuild loop.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _fabColumnKey.currentContext;
+      if (ctx == null) return;
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null || !box.hasSize) return;
+      // Column is anchored at top: 130; bottom Y = 130 + column height.
+      final bottom = 130.0 + box.size.height;
+      if (_fabColumnBottomY == null || (_fabColumnBottomY! - bottom).abs() > 0.5) {
+        setState(() => _fabColumnBottomY = bottom);
+      }
+    });
     
     // Safety check just in case dashboard data failed
     final balances = _dashboardData?['balances'] ?? {'fuel': 0.0, 'fastag': 0.0};
@@ -1602,6 +1624,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
               right: 16,
               top: 130, // Below header
               child: Column(
+                key: _fabColumnKey,
                 mainAxisSize: MainAxisSize.min,
                 children: [
 
@@ -1759,16 +1782,12 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
               left: 16,
               right: 16,
               // Anchor the banner BELOW the right-side FAB column so it
-              // sits beneath the tyre-management icon instead of next
-              // to it. FAB column starts at top: 130 and has 6 visible
-              // mini FABs. Mini FAB's visible 40 px is wrapped in a
-              // 48 px Material hit-target + a few pixels of shadow
-              // padding, so the column's effective bounding box is
-              // ~6 × 56 + 5 × 12 = 396 px. Adding the 130 px header
-              // offset, the column bottom lands near top: 530. Anchor
-              // banner at top: 548 — 18 px below the bottom-most FAB
-              // (tyre management) — across the map's full width.
-              top: 548,
+              // sits beneath the tyre-management icon. We measure the
+              // column's real height after first layout via
+              // _fabColumnKey and pin banner top = column_bottom + 12.
+              // 446 is the conservative fallback used for the first
+              // frame before measurement lands.
+              top: (_fabColumnBottomY ?? 446) + 12,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1785,17 +1804,19 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
             // 4. Draggable Sheet
             // When the navigate-to-truck (or fuel-proximity) banner is
             // visible we shrink the sheet's initial height so its top
-            // edge lands just below the banner. Banner sits at top:548
-            // with ~80 px height, so banner_bottom_y ≈ 628; we want
-            // sheet top ≈ 642 for a 14 px gap. Translate that into a
-            // fraction-of-screen for DraggableScrollableSheet. When no
-            // banner, keep the default 0.45.
+            // edge lands just below the banner. Banner top is
+            // measured_fab_bottom + 12 with ~80 px height, so the
+            // sheet should start at fab_bottom + 12 + 80 + 14 ≈
+            // fab_bottom + 106. Translate that into a fraction-of-
+            // screen for DraggableScrollableSheet. When no banner,
+            // keep the default 0.45.
             Builder(builder: (context) {
               final showBanner = _shouldShowVehicleLocator()
                   || (_fuelProxKm != null && _fuelProxKm! <= 5.0 && _fuelProxStop != null);
               final screenH = MediaQuery.of(context).size.height;
+              final bannerBottomY = (_fabColumnBottomY ?? 446) + 12 + 80;
               final initialSize = showBanner
-                  ? ((screenH - 642) / screenH).clamp(0.30, 0.55)
+                  ? ((screenH - bannerBottomY - 14) / screenH).clamp(0.30, 0.55)
                   : 0.45;
               final minSize = initialSize < 0.40 ? initialSize : 0.40;
               return DraggableScrollableSheet(
