@@ -95,7 +95,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
   // the screen height). Used to fade the floating banner stack as the
   // sheet expands so the banner doesn't end up covered by the sheet's
   // scrollable content.
-  double _sheetFraction = 0.45;
+  double _sheetFraction = 0.50;
   // The sheet animates from 0 → initialChildSize on app launch. If the
   // banner was visible during that ramp it'd flash on screen and then
   // disappear under the rising sheet — looks janky. Suppress the
@@ -1789,8 +1789,11 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                 return false;
               },
               child: DraggableScrollableSheet(
-              initialChildSize: 0.45,
-              minChildSize: 0.40,
+              // Opens slightly taller now that the vehicle-locator
+              // banner is gone (tapping the truck on the map replaces
+              // it). More trip detail visible without dragging up.
+              initialChildSize: 0.50,
+              minChildSize: 0.45,
               maxChildSize: 0.88, // Stops just below header for "Merge" effect
               snap: true,
               builder: (context, scrollController) {
@@ -1822,6 +1825,12 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                                decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
                              ),
                            ),
+
+                           // "Tap the truck to navigate" hint — shown only
+                           // when the driver's phone is >5 km from the truck.
+                           // Doubles as a shortcut: tap opens the same sheet
+                           // the truck marker would.
+                           _buildTapTruckHint(),
 
                            // Compact next-stop strip — always visible at the top of
                            // the sheet so the driver sees where they're heading
@@ -3332,6 +3341,67 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     final lng = double.tryParse(loc['lng'].toString()) ?? 0.0;
     if (lat == 0 && lng == 0) return null;
     return [lat, lng];
+  }
+
+  /// Slim hint that surfaces at the top of the bottom sheet only when
+  /// the phone's GPS reports we're >5 km from the truck. It's both a
+  /// nudge ("you're far — go tap the truck") and a tap-shortcut: the
+  /// chip itself opens the same navigate sheet the truck marker would,
+  /// so the driver doesn't have to fish around the map for the truck.
+  Widget _buildTapTruckHint() {
+    final v = _vehicleLatLng();
+    if (v == null || _driverPos == null) return const SizedBox.shrink();
+    final km = _getHaversineDistance(_driverPos!.latitude, _driverPos!.longitude, v[0], v[1]);
+    if (km <= 5.0) return const SizedBox.shrink();
+    final t = Provider.of<LocalizationProvider>(context, listen: false);
+    final accent = const Color(0xFFEF4444); // rose-500
+    final kmUnit = t.t('unit_km') ?? 'km';
+    final distLabel = km < 10
+        ? '${km.toStringAsFixed(1)} $kmUnit'
+        : '${km.toStringAsFixed(0)} $kmUnit';
+    final hintTemplate = t.t('tap_truck_hint') ?? 'Truck is {distance} away — tap it on the map to navigate';
+    final hintLine = hintTemplate.replaceAll('{distance}', distLabel);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: accent.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: _showNavigateToTruckSheet,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: accent.withOpacity(0.20),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.local_shipping, color: accent, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    hintLine,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                    ),
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: accent),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   /// Bottom sheet that pops up when the driver taps the truck marker
