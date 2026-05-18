@@ -92,12 +92,10 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
   bool _reminderSent = false;
 
   // Tracks the draggable bottom-sheet's current size (as a fraction of
-  // the screen height), so the floating fuel-proximity and
-  // vehicle-locator banners can be pinned just above the sheet instead
-  // of at a hard-coded position. Without this the locator banner sits
-  // behind the sheet on first open because the initial sheet size
-  // (0.45) is larger than the previous hard-coded anchor (0.40).
-  double _sheetFraction = 0.45;
+  // the screen height). Used to fade the floating banner stack as the
+  // sheet expands so the banner doesn't end up covered by the sheet's
+  // scrollable content.
+  double _sheetFraction = 0.35;
 
   // Unplanned stoppage state
   DateTime? _unplannedStopSince;
@@ -1760,23 +1758,11 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
             ),
 
             // 3a. Floating banners stack — fuel proximity (amber/red) +
-            //     vehicle locator (blue). Anchored BELOW the right-
-            //     side FAB column so it sits clear of every mini FAB
-            //     and renders full width across the map.
-            //
-            //     Position is computed from the FAB column itself: it
-            //     starts at top: 130, the column has up to 6 mini FABs
-            //     (each rendered at ~48 px including hit-target padding
-            //     on some platforms) with 12 px gaps. Worst-case column
-            //     height: 6×48 + 5×12 = 348 px → bottom at top: 478. We
-            //     anchor banner at top: 500 to clear that plus add
-            //     visual breathing room. Bumping the offset was the
-            //     simpler fix than measuring the column at runtime.
-            //
-            //     Fades out as the bottom sheet expands past 0.55 so
-            //     it never fights with the sheet's scrollable content,
-            //     with IgnorePointer kicking in when invisible so it
-            //     can't swallow taps.
+            //     vehicle locator (blue). Non-scrollable, behind the
+            //     bottom sheet. Anchored below the FAB column at
+            //     top: 500. Fade kicks in as the sheet expands past
+            //     0.42 so the banner stays out of the sheet's scroll
+            //     area when the driver opens the trip details.
             (() {
               const fadeStart = 0.42;
               const fadeEnd = 0.50;
@@ -1821,8 +1807,14 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                 return false;
               },
               child: DraggableScrollableSheet(
-              initialChildSize: 0.45,
-              minChildSize: 0.40,
+              // Open at 0.35 so the floating banner (vehicle locator
+              // when truck is far, fuel proximity when near) sits
+              // cleanly above the sheet on landing. Driver pulls up
+              // to see the rest of the trip details — works just like
+              // the previous 0.45 default, plus the banner is no
+              // longer half-covered by the sheet's rounded top.
+              initialChildSize: 0.35,
+              minChildSize: 0.30,
               maxChildSize: 0.88, // Stops just below header for "Merge" effect
               snap: true,
               builder: (context, scrollController) {
