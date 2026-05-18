@@ -1758,7 +1758,11 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
             Positioned(
               left: 16,
               right: 16,
-              bottom: MediaQuery.of(context).size.height * 0.40 + 16,
+              // Anchor to the sheet's INITIAL height (0.45), not the
+              // min (0.40). Otherwise the sheet's top edge covers the
+              // banner on app open — the user only sees the banner if
+              // they manually drag the sheet down to min.
+              bottom: MediaQuery.of(context).size.height * 0.45 + 12,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
