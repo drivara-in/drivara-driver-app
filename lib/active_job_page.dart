@@ -1760,21 +1760,26 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
             ),
 
             // 3a. Floating banners stack — fuel proximity (amber/red) +
-            //     vehicle locator (blue). Anchored *below* the right-
-            //     side FAB column (Leaderboard → Tyre Management) so
-            //     it sits clear of every mini FAB and renders FULL
-            //     WIDTH across the map. The FAB column starts at
-            //     top: 130 and has 6 mini FABs (40 px each + 5 × 12 px
-            //     gaps = 300 px), so the column ends around top 430 —
-            //     anchor banner at top: 446 (+16 px breathing room).
+            //     vehicle locator (blue). Anchored BELOW the right-
+            //     side FAB column so it sits clear of every mini FAB
+            //     and renders full width across the map.
+            //
+            //     Position is computed from the FAB column itself: it
+            //     starts at top: 130, the column has up to 6 mini FABs
+            //     (each rendered at ~48 px including hit-target padding
+            //     on some platforms) with 12 px gaps. Worst-case column
+            //     height: 6×48 + 5×12 = 348 px → bottom at top: 478. We
+            //     anchor banner at top: 500 to clear that plus add
+            //     visual breathing room. Bumping the offset was the
+            //     simpler fix than measuring the column at runtime.
             //
             //     Fades out as the bottom sheet expands past 0.55 so
             //     it never fights with the sheet's scrollable content,
             //     with IgnorePointer kicking in when invisible so it
             //     can't swallow taps.
             (() {
-              const fadeStart = 0.50;
-              const fadeEnd = 0.58;
+              const fadeStart = 0.42;
+              const fadeEnd = 0.50;
               final opacity = _sheetFraction <= fadeStart
                   ? 1.0
                   : _sheetFraction >= fadeEnd
@@ -1783,7 +1788,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
               return Positioned(
                 left: 16,
                 right: 16,
-                top: 446,
+                top: 500,
                 child: IgnorePointer(
                   ignoring: opacity < 0.05,
                   child: AnimatedOpacity(
