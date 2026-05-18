@@ -2744,8 +2744,16 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
               ),
               _refuelStat(label: '₹/${t.t('unit_litre_short') ?? 'L'}', value: '₹${pricePerLiter.toStringAsFixed(1)}'),
               _refuelStat(
-                label: t.t('refuel_total_label') ?? 'Total',
-                value: '₹${fillCostInr.toStringAsFixed(0)}',
+                // Full tank cost is an estimate — label the stat
+                // "Estimate" and prefix the figure with a tilde so the
+                // driver doesn't take the rupee number as the precise
+                // amount the pump will charge.
+                label: isFullTank
+                    ? (t.t('refuel_estimate_label') ?? 'Estimate')
+                    : (t.t('refuel_total_label') ?? 'Total'),
+                value: isFullTank
+                    ? '~₹${fillCostInr.toStringAsFixed(0)}'
+                    : '₹${fillCostInr.toStringAsFixed(0)}',
                 highlight: true,
               ),
             ],
@@ -3346,6 +3354,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     final outletName = (stop['outletName'] ?? 'Fuel Stop').toString();
     final pricePerL = double.tryParse((stop['pricePerLiter'] ?? '').toString());
     final fillL = double.tryParse((stop['fillLiters'] ?? '').toString());
+    final fillCost = double.tryParse((stop['fillCostInr'] ?? '').toString());
     final isFullTank = (stop['action'] ?? '').toString() == 'fill_full';
     final isUrgent = km <= 2.0;
     final litreShort = t.t('unit_litre_short') ?? 'L';
@@ -3418,13 +3427,19 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                         color: Colors.white,
                       ),
                     ),
-                    if (pricePerL != null)
+                    if (pricePerL != null || isFullTank)
                       Text(
+                        // Full tank → "Full tank · Est. ₹X" (cost as estimate,
+                        // no L; the pump auto-stops at brim and the planner's
+                        // litre number isn't reliable for the driver to act on).
+                        // Partial → exact litres + price/L like before.
                         isFullTank
-                            ? '${t.t('fill_full') ?? 'Full tank'} · ₹${pricePerL.toStringAsFixed(1)}/$litreShort'
-                            : (fillL != null
+                            ? (fillCost != null && fillCost > 0
+                                ? '${t.t('fill_full') ?? 'Full tank'} · ${t.t('refuel_est_prefix') ?? '~₹'}${fillCost.toStringAsFixed(0)}'
+                                : (t.t('fill_full') ?? 'Full tank'))
+                            : (fillL != null && pricePerL != null
                                 ? '${fillL.toStringAsFixed(0)} $litreShort @ ₹${pricePerL.toStringAsFixed(1)}/$litreShort'
-                                : '₹${pricePerL.toStringAsFixed(1)}/$litreShort'),
+                                : (pricePerL != null ? '₹${pricePerL.toStringAsFixed(1)}/$litreShort' : '')),
                         style: GoogleFonts.inter(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
