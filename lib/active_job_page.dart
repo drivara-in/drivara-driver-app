@@ -1760,17 +1760,21 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
             ),
 
             // 3a. Floating banners stack — fuel proximity (amber/red) +
-            //     vehicle locator (blue). Anchored just above the
-            //     draggable sheet (`bottom = sheet edge + 12 px`) so
-            //     they never overlap its scrollable content. They also
-            //     fade out as the user expands the sheet — at min/
-            //     initial size (≤0.45) fully visible; by 0.55 they're
-            //     gone, freeing the map area for the user who actively
-            //     wants to see it. IgnorePointer kicks in when faded so
-            //     the banner can't swallow taps meant for icons below.
+            //     vehicle locator (blue). Anchored *below* the right-
+            //     side FAB column (Leaderboard → Tyre Management) so
+            //     it sits clear of every mini FAB and renders FULL
+            //     WIDTH across the map. The FAB column starts at
+            //     top: 130 and has 6 mini FABs (40 px each + 5 × 12 px
+            //     gaps = 300 px), so the column ends around top 430 —
+            //     anchor banner at top: 446 (+16 px breathing room).
+            //
+            //     Fades out as the bottom sheet expands past 0.55 so
+            //     it never fights with the sheet's scrollable content,
+            //     with IgnorePointer kicking in when invisible so it
+            //     can't swallow taps.
             (() {
-              const fadeStart = 0.45;
-              const fadeEnd = 0.55;
+              const fadeStart = 0.50;
+              const fadeEnd = 0.58;
               final opacity = _sheetFraction <= fadeStart
                   ? 1.0
                   : _sheetFraction >= fadeEnd
@@ -1778,13 +1782,8 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                       : 1.0 - ((_sheetFraction - fadeStart) / (fadeEnd - fadeStart));
               return Positioned(
                 left: 16,
-                // Banner right edge stops short of the right-side FAB column
-                // (Leaderboard / Find Fuel / Add Expense / Tyre Management
-                // etc., each a 40 px mini FAB at right: 16). Without this
-                // the banner overlapped the tyre management icon on first
-                // open when the sheet sits at its 0.45 initial size.
-                right: 72,
-                bottom: MediaQuery.of(context).size.height * _sheetFraction + 12,
+                right: 16,
+                top: 446,
                 child: IgnorePointer(
                   ignoring: opacity < 0.05,
                   child: AnimatedOpacity(
