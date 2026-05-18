@@ -346,17 +346,21 @@ class _LiveJobMapState extends State<LiveJobMap> {
         final cost = double.tryParse(stop['fillCostInr']?.toString() ?? '')
             ?? (fillL * pricePerL);
         final action = (stop['action'] ?? 'fill_partial').toString();
-        // Localized action label + "Full tank" never shows an explicit
-        // litres figure (driver doesn't pre-meter; pump auto-stops at full).
+        // Localised action + figures. ₹/L is intentionally omitted on every
+        // planned-fuel surface — it's a receipt-check signal for actuals
+        // only. For full-tank fills both litres and cost render with an
+        // "Est." prefix because the pump auto-stops at brim and the
+        // planner's numbers are approximations.
         final t = Provider.of<LocalizationProvider>(context, listen: false);
         final isFullTank = action == 'fill_full';
         final actionLabel = isFullTank
             ? (t.t('fill_full') ?? 'Full tank')
-            : (t.t('fill_partial') ?? 'Partial');
+            : (t.t('fill_partial') ?? 'Partial fill');
         final litreShort = t.t('unit_litre_short') ?? 'L';
+        final est = t.t('refuel_est_short') ?? 'Est.';
         final snippet = isFullTank
-            ? '$actionLabel · ₹${pricePerL.toStringAsFixed(1)}/$litreShort · ₹${cost.toStringAsFixed(0)}'
-            : '$actionLabel · ${fillL.toStringAsFixed(0)}$litreShort @ ₹${pricePerL.toStringAsFixed(1)}/$litreShort · ₹${cost.toStringAsFixed(0)}';
+            ? '$actionLabel · $est ${fillL.toStringAsFixed(0)} $litreShort · $est ₹${cost.toStringAsFixed(0)}'
+            : '$actionLabel · ${fillL.toStringAsFixed(0)} $litreShort · ₹${cost.toStringAsFixed(0)}';
 
         markers.add(Marker(
           markerId: MarkerId('planned_fuel_$i'),

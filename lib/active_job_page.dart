@@ -2627,7 +2627,8 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     final outletAddress = (next['outletAddress'] ?? '').toString();
     final state = (next['state'] ?? '').toString();
     final fillLiters = (_parseNum(next['fillLiters']) ?? 0).toDouble();
-    final pricePerLiter = (_parseNum(next['pricePerLiter']) ?? 0).toDouble();
+    // pricePerLiter is intentionally not surfaced on planned-fuel UIs —
+    // it's a receipt-check signal for actual fills, not a plan figure.
     final fillCostInr = (_parseNum(next['fillCostInr']) ?? 0).toDouble();
     final lat = (_parseNum(next['lat']) ?? 0).toDouble();
     final lng = (_parseNum(next['lng']) ?? 0).toDouble();
@@ -3377,7 +3378,6 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     final stop = _fuelProxStop ?? const {};
     final km = _fuelProxKm ?? 0;
     final outletName = (stop['outletName'] ?? 'Fuel Stop').toString();
-    final pricePerL = double.tryParse((stop['pricePerLiter'] ?? '').toString());
     final fillL = double.tryParse((stop['fillLiters'] ?? '').toString());
     final fillCost = double.tryParse((stop['fillCostInr'] ?? '').toString());
     final isFullTank = (stop['action'] ?? '').toString() == 'fill_full';
