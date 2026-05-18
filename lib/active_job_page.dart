@@ -2048,7 +2048,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                                 && _dashboardData!['fuelPlan'] != null
                                 && (_dashboardData!['fuelPlan']['stops'] as List?)?.isNotEmpty == true) ...[
                               Text(
-                                'Next refuel',
+                                t.t('next_refuel_title') ?? 'Next refuel',
                                 style: AppTextStyles.header.copyWith(
                                   fontSize: 18,
                                   color: Theme.of(context).textTheme.bodyLarge?.color,
