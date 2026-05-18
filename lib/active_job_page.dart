@@ -91,17 +91,6 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
   DateTime? _stoppedSince;
   bool _reminderSent = false;
 
-  // Tracks the draggable bottom-sheet's current size (as a fraction of
-  // the screen height). Used to fade the floating banner stack as the
-  // sheet expands so the banner doesn't end up covered by the sheet's
-  // scrollable content.
-  double _sheetFraction = 0.50;
-  // The sheet animates from 0 → initialChildSize on app launch. If the
-  // banner was visible during that ramp it'd flash on screen and then
-  // disappear under the rising sheet — looks janky. Suppress the
-  // banner until the landing animation has settled.
-  bool _sheetSettled = false;
-
   // Unplanned stoppage state
   DateTime? _unplannedStopSince;
   bool _stoppageReasonRequested = false;
@@ -144,14 +133,6 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     _connectStream();
     _initFuelChime();
     _initDriverGps();
-
-    // Banner stays hidden for the first ~600 ms while the
-    // DraggableScrollableSheet animates up to its initial size.
-    // Without this the banner flashes on the map and then disappears
-    // under the rising sheet — looks janky.
-    Future.delayed(const Duration(milliseconds: 650), () {
-      if (mounted) setState(() => _sheetSettled = true);
-    });
   }
 
   Future<void> _initDriverGps() async {
@@ -1533,11 +1514,6 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                   job: _job,
                   vehicle: vehicle,
                   fuelStations: _fuelStations,
-                  // Tapping the truck marker pops the "navigate to truck"
-                  // sheet (distance + Navigate button). Replaces the old
-                  // floating vehicle-locator banner that ate screen real
-                  // estate above the bottom sheet.
-                  onVehicleTap: _showNavigateToTruckSheet,
                   // Feed the server's live fuel plan (stops) into the map so
                   // the driver sees orange pump markers at each planned refuel,
                   // not just the text card below.
@@ -1775,25 +1751,31 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
               ),
             ),
 
-            // (Floating banner moved further down — needs to render
-            //  AFTER the sheet so it visually sits on top of the
-            //  sheet's rounded corner area without being clipped.)
+            // 3a. Floating banners stack — fuel proximity (amber/red) +
+            //     vehicle locator (blue), in that priority. Both anchor
+            //     just above the bottom sheet so they never overlap the
+            //     scrollable content.
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: MediaQuery.of(context).size.height * 0.40 + 16,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_fuelProxKm != null && _fuelProxKm! <= 5.0 && _fuelProxStop != null) ...[
+                    _buildFuelProximityBanner(),
+                    const SizedBox(height: 8),
+                  ],
+                  if (_shouldShowVehicleLocator()) _buildVehicleLocatorBanner(),
+                ],
+              ),
+            ),
 
-            // 4. Draggable Sheet — wrapped in a NotificationListener so
-            //    the banner stack can react to the sheet's live edge.
-            NotificationListener<DraggableScrollableNotification>(
-              onNotification: (n) {
-                if ((n.extent - _sheetFraction).abs() > 0.005) {
-                  setState(() => _sheetFraction = n.extent);
-                }
-                return false;
-              },
-              child: DraggableScrollableSheet(
-              // Opens slightly taller now that the vehicle-locator
-              // banner is gone (tapping the truck on the map replaces
-              // it). More trip detail visible without dragging up.
-              initialChildSize: 0.50,
-              minChildSize: 0.45,
+            // 4. Draggable Sheet
+            DraggableScrollableSheet(
+              initialChildSize: 0.45,
+              minChildSize: 0.40,
               maxChildSize: 0.88, // Stops just below header for "Merge" effect
               snap: true,
               builder: (context, scrollController) {
@@ -1825,12 +1807,6 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                                decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
                              ),
                            ),
-
-                           // "Tap the truck to navigate" hint — shown only
-                           // when the driver's phone is >5 km from the truck.
-                           // Doubles as a shortcut: tap opens the same sheet
-                           // the truck marker would.
-                           _buildTapTruckHint(),
 
                            // Compact next-stop strip — always visible at the top of
                            // the sheet so the driver sees where they're heading
@@ -2415,7 +2391,6 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                 );
               }
             ),
-            ),
 
 
 
@@ -2524,39 +2499,6 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                 ),
               ),
             ),
-
-            // 6. Floating fuel-proximity banner — only shown when the
-            //    truck is within 5 km of a planned refuel pump. The
-            //    old vehicle-locator banner ("too far from truck") is
-            //    gone — that action moved to a bottom sheet that pops
-            //    when the driver taps the truck marker on the map.
-            //    Rendered LAST in the Stack so it z-orders above the
-            //    sheet's rounded top edge. Fades out as the user
-            //    drags the sheet up past 0.50.
-            if (_fuelProxKm != null && _fuelProxKm! <= 5.0 && _fuelProxStop != null)
-              (() {
-                const fadeStart = 0.50;
-                const fadeEnd = 0.58;
-                final rawOpacity = _sheetFraction <= fadeStart
-                    ? 1.0
-                    : _sheetFraction >= fadeEnd
-                        ? 0.0
-                        : 1.0 - ((_sheetFraction - fadeStart) / (fadeEnd - fadeStart));
-                final opacity = _sheetSettled ? rawOpacity : 0.0;
-                return Positioned(
-                  left: 16,
-                  right: 16,
-                  top: 446,
-                  child: IgnorePointer(
-                    ignoring: opacity < 0.05,
-                    child: AnimatedOpacity(
-                      duration: const Duration(milliseconds: 120),
-                      opacity: opacity,
-                      child: _buildFuelProximityBanner(),
-                    ),
-                  ),
-                );
-              })(),
           ],
         ),
     );
@@ -2685,8 +2627,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     final outletAddress = (next['outletAddress'] ?? '').toString();
     final state = (next['state'] ?? '').toString();
     final fillLiters = (_parseNum(next['fillLiters']) ?? 0).toDouble();
-    // pricePerLiter is intentionally not surfaced on planned-fuel UIs —
-    // it's a receipt-check signal for actual fills, not a plan figure.
+    final pricePerLiter = (_parseNum(next['pricePerLiter']) ?? 0).toDouble();
     final fillCostInr = (_parseNum(next['fillCostInr']) ?? 0).toDouble();
     final lat = (_parseNum(next['lat']) ?? 0).toDouble();
     final lng = (_parseNum(next['lng']) ?? 0).toDouble();
@@ -2817,16 +2758,15 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
             children: [
               _refuelStat(
                 label: t.t('refuel_fill_label') ?? 'Fill',
-                // Full tank renders the litres with a small "Est."
-                // prefix; partial shows the exact figure.
-                value: '${fillLiters.toStringAsFixed(0)} ${t.t('unit_litre_short') ?? 'L'}',
-                estPrefix: isFullTank ? (t.t('refuel_est_short') ?? 'Est.') : null,
-                sub: actionLabel,
+                // For full tank → just the label, no exact litres (driver
+                // doesn't pre-meter; pump auto-stops at full).
+                value: isFullTank ? actionLabel : '${fillLiters.toStringAsFixed(0)} ${t.t('unit_litre_short') ?? 'L'}',
+                sub: isFullTank ? null : actionLabel,
               ),
+              _refuelStat(label: '₹/${t.t('unit_litre_short') ?? 'L'}', value: '₹${pricePerLiter.toStringAsFixed(1)}'),
               _refuelStat(
                 label: t.t('refuel_total_label') ?? 'Total',
                 value: '₹${fillCostInr.toStringAsFixed(0)}',
-                estPrefix: isFullTank ? (t.t('refuel_est_short') ?? 'Est.') : null,
                 highlight: true,
               ),
             ],
@@ -2894,48 +2834,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     );
   }
 
-  Widget _refuelStat({
-    required String label,
-    required String value,
-    String? sub,
-    String? estPrefix,
-    bool highlight = false,
-  }) {
-    final valueColor = highlight
-        ? const Color(0xFF047857)
-        : Theme.of(context).textTheme.bodyLarge?.color;
-    final valueText = estPrefix == null
-        ? Text(
-            value,
-            style: GoogleFonts.inter(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: valueColor,
-            ),
-          )
-        // Full-tank fills: small "Est." prefix in the locale's word for
-        // "estimate", followed by the value. Keeps the number prominent
-        // while making the approximate nature unmistakable.
-        : Text.rich(
-            TextSpan(children: [
-              TextSpan(
-                text: '$estPrefix ',
-                style: GoogleFonts.inter(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).textTheme.bodySmall?.color,
-                ),
-              ),
-              TextSpan(
-                text: value,
-                style: GoogleFonts.inter(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: valueColor,
-                ),
-              ),
-            ]),
-          );
+  Widget _refuelStat({required String label, required String value, String? sub, bool highlight = false}) {
     return Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2950,7 +2849,16 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
             ),
           ),
           const SizedBox(height: 3),
-          valueText,
+          Text(
+            value,
+            style: GoogleFonts.inter(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: highlight
+                  ? const Color(0xFF047857)
+                  : Theme.of(context).textTheme.bodyLarge?.color,
+            ),
+          ),
           if (sub != null) ...[
             const SizedBox(height: 2),
             Text(
@@ -3343,199 +3251,6 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     return [lat, lng];
   }
 
-  /// Slim hint that surfaces at the top of the bottom sheet only when
-  /// the phone's GPS reports we're >5 km from the truck. It's both a
-  /// nudge ("you're far — go tap the truck") and a tap-shortcut: the
-  /// chip itself opens the same navigate sheet the truck marker would,
-  /// so the driver doesn't have to fish around the map for the truck.
-  Widget _buildTapTruckHint() {
-    final v = _vehicleLatLng();
-    if (v == null || _driverPos == null) return const SizedBox.shrink();
-    final km = _getHaversineDistance(_driverPos!.latitude, _driverPos!.longitude, v[0], v[1]);
-    if (km <= 5.0) return const SizedBox.shrink();
-    final t = Provider.of<LocalizationProvider>(context, listen: false);
-    final accent = const Color(0xFFEF4444); // rose-500
-    final kmUnit = t.t('unit_km') ?? 'km';
-    final distLabel = km < 10
-        ? '${km.toStringAsFixed(1)} $kmUnit'
-        : '${km.toStringAsFixed(0)} $kmUnit';
-    final hintTemplate = t.t('tap_truck_hint') ?? 'Truck is {distance} away — tap it on the map to navigate';
-    final hintLine = hintTemplate.replaceAll('{distance}', distLabel);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Material(
-        color: accent.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: _showNavigateToTruckSheet,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: accent.withOpacity(0.20),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(Icons.local_shipping, color: accent, size: 18),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    hintLine,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).textTheme.bodyLarge?.color,
-                    ),
-                  ),
-                ),
-                Icon(Icons.chevron_right_rounded, color: accent),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Bottom sheet that pops up when the driver taps the truck marker
-  /// on the map. Shows the live distance from the phone GPS to the
-  /// truck, with a "Navigate" button that hands off to Google/Apple
-  /// Maps. Replaces the old floating vehicle-locator banner that
-  /// crowded the screen on landing.
-  void _showNavigateToTruckSheet() {
-    final t = Provider.of<LocalizationProvider>(context, listen: false);
-    final v = _vehicleLatLng();
-    if (v == null) return;
-    final km = _driverPos == null
-        ? null
-        : _getHaversineDistance(_driverPos!.latitude, _driverPos!.longitude, v[0], v[1]);
-    final reg = (_dashboardData?['vehicle']?['registration_number']
-            ?? _job['vehicle_registration']
-            ?? _job['vehicle_name']
-            ?? t.t('vehicle_locator_title') ?? 'Vehicle')
-        .toString();
-    final isFar = km != null && km > 5.0;
-    final accent = isFar ? const Color(0xFFEF4444) : AppColors.primary;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Theme.of(context).cardTheme.color,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        final distLabel = km == null
-            ? '—'
-            : (km < 10
-                ? '${km.toStringAsFixed(1)} ${t.t('unit_km') ?? 'km'}'
-                : '${km.toStringAsFixed(0)} ${t.t('unit_km') ?? 'km'}');
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Drag handle.
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[400],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: accent.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(Icons.local_shipping, color: accent, size: 24),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            reg,
-                            style: GoogleFonts.inter(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: Theme.of(context).textTheme.bodyLarge?.color,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            km == null
-                                ? (t.t('vehicle_locator_subtitle') ?? 'Tap Navigate to head to it')
-                                : '$distLabel ${t.t('away_suffix') ?? 'away'}',
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: isFar
-                                  ? accent
-                                  : Theme.of(context).textTheme.bodySmall?.color,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton.icon(
-                    onPressed: () async {
-                      Navigator.of(ctx).pop();
-                      final fromLat = _driverPos?.latitude;
-                      final fromLng = _driverPos?.longitude;
-                      await _launchMapsNavigation(
-                        v[0],
-                        v[1],
-                        reg,
-                        originLat: fromLat,
-                        originLng: fromLng,
-                      );
-                    },
-                    icon: const Icon(Icons.directions),
-                    label: Text(
-                      t.t('action_navigate') ?? 'Navigate',
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: accent,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   /// Banner shown when the driver is > 1 km from the vehicle (typical case:
   /// a job was just assigned and the driver hasn't reached the truck yet).
   /// Tap "Navigate" → opens Google Maps with the truck's lat/lng as the
@@ -3650,8 +3365,8 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     final stop = _fuelProxStop ?? const {};
     final km = _fuelProxKm ?? 0;
     final outletName = (stop['outletName'] ?? 'Fuel Stop').toString();
+    final pricePerL = double.tryParse((stop['pricePerLiter'] ?? '').toString());
     final fillL = double.tryParse((stop['fillLiters'] ?? '').toString());
-    final fillCost = double.tryParse((stop['fillCostInr'] ?? '').toString());
     final isFullTank = (stop['action'] ?? '').toString() == 'fill_full';
     final isUrgent = km <= 2.0;
     final litreShort = t.t('unit_litre_short') ?? 'L';
@@ -3724,46 +3439,19 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                         color: Colors.white,
                       ),
                     ),
-                    if (fillL != null || fillCost != null || isFullTank)
-                      (() {
-                        // Full tank → "Full tank · Est. 200 L · Est. ₹17,000"
-                        // where each "Est." prefix is rendered in a smaller,
-                        // dimmer style so the figure stays the focal point.
-                        // Partial → exact "100 L · ₹9,200" (no ₹/L; that's a
-                        // receipt-check signal, not a plan figure).
-                        final base = GoogleFonts.inter(
+                    if (pricePerL != null)
+                      Text(
+                        isFullTank
+                            ? '${t.t('fill_full') ?? 'Full tank'} · ₹${pricePerL.toStringAsFixed(1)}/$litreShort'
+                            : (fillL != null
+                                ? '${fillL.toStringAsFixed(0)} $litreShort @ ₹${pricePerL.toStringAsFixed(1)}/$litreShort'
+                                : '₹${pricePerL.toStringAsFixed(1)}/$litreShort'),
+                        style: GoogleFonts.inter(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: Colors.white.withOpacity(0.85),
-                        );
-                        final estStyle = GoogleFonts.inter(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white.withOpacity(0.65),
-                        );
-                        final est = (t.t('refuel_est_short') ?? 'Est.') + ' ';
-                        if (!isFullTank) {
-                          final parts = <String>[
-                            if (fillL != null) '${fillL.toStringAsFixed(0)} $litreShort',
-                            if (fillCost != null && fillCost > 0) '₹${fillCost.toStringAsFixed(0)}',
-                          ];
-                          return Text(parts.join(' · '), style: base);
-                        }
-                        final spans = <TextSpan>[
-                          TextSpan(text: t.t('fill_full') ?? 'Full tank', style: base),
-                        ];
-                        if (fillL != null) {
-                          spans.add(TextSpan(text: ' · ', style: base));
-                          spans.add(TextSpan(text: est, style: estStyle));
-                          spans.add(TextSpan(text: '${fillL.toStringAsFixed(0)} $litreShort', style: base));
-                        }
-                        if (fillCost != null && fillCost > 0) {
-                          spans.add(TextSpan(text: ' · ', style: base));
-                          spans.add(TextSpan(text: est, style: estStyle));
-                          spans.add(TextSpan(text: '₹${fillCost.toStringAsFixed(0)}', style: base));
-                        }
-                        return Text.rich(TextSpan(children: spans));
-                      })(),
+                        ),
+                      ),
                   ],
                 ),
               ),

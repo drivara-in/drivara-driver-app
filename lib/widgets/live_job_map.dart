@@ -20,7 +20,6 @@ class LiveJobMap extends StatefulWidget {
     this.onFuelStationTap,
     this.plannedFuelStops,
     this.onPlannedFuelStopTap,
-    this.onVehicleTap,
   });
 
   final List<Map<String, dynamic>>? fuelStations;
@@ -30,10 +29,6 @@ class LiveJobMap extends StatefulWidget {
   /// action ('fill_full' | 'fill_partial'), distanceFromStartKm, etc.
   final List<Map<String, dynamic>>? plannedFuelStops;
   final Function(Map<String, dynamic>)? onPlannedFuelStopTap;
-  /// Fired when the driver taps the truck marker. Used to surface a
-  /// "distance to truck + Navigate" sheet — replaces the floating
-  /// vehicle-locator banner that used to sit at the top of the sheet.
-  final VoidCallback? onVehicleTap;
 
   @override
   State<LiveJobMap> createState() => _LiveJobMapState();
@@ -159,16 +154,11 @@ class _LiveJobMapState extends State<LiveJobMap> {
           markers.add(Marker(
             markerId: const MarkerId('vehicle'),
             position: vehiclePos,
-            rotation: heading,
+            rotation: heading, 
             icon: _vehicleIcon!,
             anchor: const Offset(0.5, 0.5),
             flat: true,
-            // No InfoWindow — taps go straight to the parent's handler,
-            // which surfaces a "distance + Navigate" bottom sheet.
-            consumeTapEvents: true,
-            onTap: () {
-              if (widget.onVehicleTap != null) widget.onVehicleTap!();
-            },
+            infoWindow: const InfoWindow(title: "My Truck"),
             zIndex: 2,
           ));
         }
@@ -356,21 +346,17 @@ class _LiveJobMapState extends State<LiveJobMap> {
         final cost = double.tryParse(stop['fillCostInr']?.toString() ?? '')
             ?? (fillL * pricePerL);
         final action = (stop['action'] ?? 'fill_partial').toString();
-        // Localised action + figures. ₹/L is intentionally omitted on every
-        // planned-fuel surface — it's a receipt-check signal for actuals
-        // only. For full-tank fills both litres and cost render with an
-        // "Est." prefix because the pump auto-stops at brim and the
-        // planner's numbers are approximations.
+        // Localized action label + "Full tank" never shows an explicit
+        // litres figure (driver doesn't pre-meter; pump auto-stops at full).
         final t = Provider.of<LocalizationProvider>(context, listen: false);
         final isFullTank = action == 'fill_full';
         final actionLabel = isFullTank
             ? (t.t('fill_full') ?? 'Full tank')
-            : (t.t('fill_partial') ?? 'Partial fill');
+            : (t.t('fill_partial') ?? 'Partial');
         final litreShort = t.t('unit_litre_short') ?? 'L';
-        final est = t.t('refuel_est_short') ?? 'Est.';
         final snippet = isFullTank
-            ? '$actionLabel · $est ${fillL.toStringAsFixed(0)} $litreShort · $est ₹${cost.toStringAsFixed(0)}'
-            : '$actionLabel · ${fillL.toStringAsFixed(0)} $litreShort · ₹${cost.toStringAsFixed(0)}';
+            ? '$actionLabel · ₹${pricePerL.toStringAsFixed(1)}/$litreShort · ₹${cost.toStringAsFixed(0)}'
+            : '$actionLabel · ${fillL.toStringAsFixed(0)}$litreShort @ ₹${pricePerL.toStringAsFixed(1)}/$litreShort · ₹${cost.toStringAsFixed(0)}';
 
         markers.add(Marker(
           markerId: MarkerId('planned_fuel_$i'),
