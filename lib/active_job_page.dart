@@ -2696,14 +2696,44 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     final action = (next['action'] ?? 'fill_partial').toString();
     // Localised primary reason. Server emits a `reasonCode` like
     // r_partial_cheaper_ahead + a `reasonParams` map (e.g. {price: 92.5});
-    // we render that as a localised template. Older plans without these
-    // fields fall back to the server-built English `reason` text.
-    final reasonCode = (next['reasonCode'] ?? '').toString();
+    // we render that as a localised template. When the server hasn't
+    // been redeployed with that emission (or sends an unknown code),
+    // we reverse-match the well-known English `reason` strings the
+    // server builds in fuelStrategy.ts so we still land on the right
+    // localised template instead of leaking English to the driver.
+    String reasonCode = (next['reasonCode'] ?? '').toString();
     final reasonParamsRaw = next['reasonParams'];
     final reasonParams = reasonParamsRaw is Map
         ? Map<String, dynamic>.from(reasonParamsRaw)
         : <String, dynamic>{};
     final reasonFallback = (next['reason'] ?? '').toString();
+    if (reasonCode.isEmpty && reasonFallback.isNotEmpty) {
+      // Patterns mirror server/src/fuelStrategy.ts buildPrimaryReason().
+      final patterns = <RegExp, MapEntry<String, List<String>>>{
+        RegExp(r'^Cheapest on route \(₹([\d.]+)/L\)$'):
+            MapEntry('r_cheapest_on_route', ['price']),
+        RegExp(r'^₹([\d.]+)/L below corridor avg$'):
+            MapEntry('r_below_corridor_avg', ['delta']),
+        RegExp(r'^Priced low vs\. own history \(z=([\-\d.]+)\)$'):
+            MapEntry('r_low_vs_history', ['z']),
+        RegExp(r'^Partial fill — ₹([\d.]+)/L pump ahead$'):
+            MapEntry('r_partial_cheaper_ahead', ['price']),
+        RegExp(r'^Fill to complete trip$'):
+            MapEntry('r_fill_to_complete', <String>[]),
+        RegExp(r'^Bridge fill'):
+            MapEntry('r_bridge_fill', <String>[]),
+      };
+      for (final entry in patterns.entries) {
+        final m = entry.key.firstMatch(reasonFallback);
+        if (m != null) {
+          reasonCode = entry.value.key;
+          for (var i = 0; i < entry.value.value.length; i++) {
+            reasonParams[entry.value.value[i]] = m.group(i + 1) ?? '';
+          }
+          break;
+        }
+      }
+    }
     String reason = reasonFallback;
     if (reasonCode.isNotEmpty) {
       final t = Provider.of<LocalizationProvider>(context, listen: false);
