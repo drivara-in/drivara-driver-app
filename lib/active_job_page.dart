@@ -2737,23 +2737,16 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
             children: [
               _refuelStat(
                 label: t.t('refuel_fill_label') ?? 'Fill',
-                // Always show the planner's litres — for full-tank with
-                // a "~" prefix so the driver knows it's an estimate
-                // (pump auto-stops at brim; final litres may differ).
-                value: isFullTank
-                    ? '~${fillLiters.toStringAsFixed(0)} ${t.t('unit_litre_short') ?? 'L'}'
-                    : '${fillLiters.toStringAsFixed(0)} ${t.t('unit_litre_short') ?? 'L'}',
+                // Full tank renders the litres with a small "Est."
+                // prefix; partial shows the exact figure.
+                value: '${fillLiters.toStringAsFixed(0)} ${t.t('unit_litre_short') ?? 'L'}',
+                estPrefix: isFullTank ? (t.t('refuel_est_short') ?? 'Est.') : null,
                 sub: actionLabel,
               ),
               _refuelStat(
-                // For full tank cost is also an estimate — relabel the
-                // stat "Estimate" with a "~" prefix to drive that home.
-                label: isFullTank
-                    ? (t.t('refuel_estimate_label') ?? 'Estimate')
-                    : (t.t('refuel_total_label') ?? 'Total'),
-                value: isFullTank
-                    ? '~₹${fillCostInr.toStringAsFixed(0)}'
-                    : '₹${fillCostInr.toStringAsFixed(0)}',
+                label: t.t('refuel_total_label') ?? 'Total',
+                value: '₹${fillCostInr.toStringAsFixed(0)}',
+                estPrefix: isFullTank ? (t.t('refuel_est_short') ?? 'Est.') : null,
                 highlight: true,
               ),
             ],
@@ -2821,7 +2814,48 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     );
   }
 
-  Widget _refuelStat({required String label, required String value, String? sub, bool highlight = false}) {
+  Widget _refuelStat({
+    required String label,
+    required String value,
+    String? sub,
+    String? estPrefix,
+    bool highlight = false,
+  }) {
+    final valueColor = highlight
+        ? const Color(0xFF047857)
+        : Theme.of(context).textTheme.bodyLarge?.color;
+    final valueText = estPrefix == null
+        ? Text(
+            value,
+            style: GoogleFonts.inter(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: valueColor,
+            ),
+          )
+        // Full-tank fills: small "Est." prefix in the locale's word for
+        // "estimate", followed by the value. Keeps the number prominent
+        // while making the approximate nature unmistakable.
+        : Text.rich(
+            TextSpan(children: [
+              TextSpan(
+                text: '$estPrefix ',
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).textTheme.bodySmall?.color,
+                ),
+              ),
+              TextSpan(
+                text: value,
+                style: GoogleFonts.inter(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: valueColor,
+                ),
+              ),
+            ]),
+          );
     return Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2836,16 +2870,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
             ),
           ),
           const SizedBox(height: 3),
-          Text(
-            value,
-            style: GoogleFonts.inter(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: highlight
-                  ? const Color(0xFF047857)
-                  : Theme.of(context).textTheme.bodyLarge?.color,
-            ),
-          ),
+          valueText,
           if (sub != null) ...[
             const SizedBox(height: 2),
             Text(
@@ -3428,30 +3453,45 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                       ),
                     ),
                     if (fillL != null || fillCost != null || isFullTank)
-                      Text(
-                        // Full tank → "Full tank · ~200 L · ~₹17,000" (both
-                        // litres and cost as estimates; the pump auto-stops
-                        // at brim so neither is the precise actual figure).
-                        // Partial → exact "100 L · ₹9,200" (no ₹/L — that's
-                        // a receipt-check signal, not a plan figure).
-                        isFullTank
-                            ? [
-                                t.t('fill_full') ?? 'Full tank',
-                                if (fillL != null) '~${fillL.toStringAsFixed(0)} $litreShort',
-                                if (fillCost != null && fillCost > 0)
-                                  '~₹${fillCost.toStringAsFixed(0)}',
-                              ].join(' · ')
-                            : [
-                                if (fillL != null) '${fillL.toStringAsFixed(0)} $litreShort',
-                                if (fillCost != null && fillCost > 0)
-                                  '₹${fillCost.toStringAsFixed(0)}',
-                              ].join(' · '),
-                        style: GoogleFonts.inter(
+                      (() {
+                        // Full tank → "Full tank · Est. 200 L · Est. ₹17,000"
+                        // where each "Est." prefix is rendered in a smaller,
+                        // dimmer style so the figure stays the focal point.
+                        // Partial → exact "100 L · ₹9,200" (no ₹/L; that's a
+                        // receipt-check signal, not a plan figure).
+                        final base = GoogleFonts.inter(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: Colors.white.withOpacity(0.85),
-                        ),
-                      ),
+                        );
+                        final estStyle = GoogleFonts.inter(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white.withOpacity(0.65),
+                        );
+                        final est = (t.t('refuel_est_short') ?? 'Est.') + ' ';
+                        if (!isFullTank) {
+                          final parts = <String>[
+                            if (fillL != null) '${fillL.toStringAsFixed(0)} $litreShort',
+                            if (fillCost != null && fillCost > 0) '₹${fillCost.toStringAsFixed(0)}',
+                          ];
+                          return Text(parts.join(' · '), style: base);
+                        }
+                        final spans = <TextSpan>[
+                          TextSpan(text: t.t('fill_full') ?? 'Full tank', style: base),
+                        ];
+                        if (fillL != null) {
+                          spans.add(TextSpan(text: ' · ', style: base));
+                          spans.add(TextSpan(text: est, style: estStyle));
+                          spans.add(TextSpan(text: '${fillL.toStringAsFixed(0)} $litreShort', style: base));
+                        }
+                        if (fillCost != null && fillCost > 0) {
+                          spans.add(TextSpan(text: ' · ', style: base));
+                          spans.add(TextSpan(text: est, style: estStyle));
+                          spans.add(TextSpan(text: '₹${fillCost.toStringAsFixed(0)}', style: base));
+                        }
+                        return Text.rich(TextSpan(children: spans));
+                      })(),
                   ],
                 ),
               ),
