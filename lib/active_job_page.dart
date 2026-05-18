@@ -91,6 +91,14 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
   DateTime? _stoppedSince;
   bool _reminderSent = false;
 
+  // Tracks the draggable bottom-sheet's current size (as a fraction of
+  // the screen height), so the floating fuel-proximity and
+  // vehicle-locator banners can be pinned just above the sheet instead
+  // of at a hard-coded position. Without this the locator banner sits
+  // behind the sheet on first open because the initial sheet size
+  // (0.45) is larger than the previous hard-coded anchor (0.40).
+  double _sheetFraction = 0.45;
+
   // Unplanned stoppage state
   DateTime? _unplannedStopSince;
   bool _stoppageReasonRequested = false;
@@ -1752,13 +1760,15 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
             ),
 
             // 3a. Floating banners stack — fuel proximity (amber/red) +
-            //     vehicle locator (blue), in that priority. Both anchor
-            //     just above the bottom sheet so they never overlap the
-            //     scrollable content.
+            //     vehicle locator (blue), in that priority. Anchored
+            //     just above the draggable sheet so they never overlap
+            //     the scrollable content as the user drags the sheet
+            //     up and down. Bottom uses the live `_sheetFraction`
+            //     value updated by the NotificationListener below.
             Positioned(
               left: 16,
               right: 16,
-              bottom: MediaQuery.of(context).size.height * 0.40 + 16,
+              bottom: MediaQuery.of(context).size.height * _sheetFraction + 12,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1772,8 +1782,17 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
               ),
             ),
 
-            // 4. Draggable Sheet
-            DraggableScrollableSheet(
+            // 4. Draggable Sheet — wrapped in a NotificationListener so
+            //    the floating banners (above) can pin themselves to the
+            //    sheet's live edge rather than a hard-coded offset.
+            NotificationListener<DraggableScrollableNotification>(
+              onNotification: (n) {
+                if ((n.extent - _sheetFraction).abs() > 0.005) {
+                  setState(() => _sheetFraction = n.extent);
+                }
+                return false;
+              },
+              child: DraggableScrollableSheet(
               initialChildSize: 0.45,
               minChildSize: 0.40,
               maxChildSize: 0.88, // Stops just below header for "Merge" effect
@@ -2390,6 +2409,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                   ),
                 );
               }
+            ),
             ),
 
 
