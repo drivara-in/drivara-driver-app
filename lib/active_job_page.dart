@@ -2737,17 +2737,17 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
             children: [
               _refuelStat(
                 label: t.t('refuel_fill_label') ?? 'Fill',
-                // For full tank → just the label, no exact litres (driver
-                // doesn't pre-meter; pump auto-stops at full).
-                value: isFullTank ? actionLabel : '${fillLiters.toStringAsFixed(0)} ${t.t('unit_litre_short') ?? 'L'}',
-                sub: isFullTank ? null : actionLabel,
+                // Always show the planner's litres — for full-tank with
+                // a "~" prefix so the driver knows it's an estimate
+                // (pump auto-stops at brim; final litres may differ).
+                value: isFullTank
+                    ? '~${fillLiters.toStringAsFixed(0)} ${t.t('unit_litre_short') ?? 'L'}'
+                    : '${fillLiters.toStringAsFixed(0)} ${t.t('unit_litre_short') ?? 'L'}',
+                sub: actionLabel,
               ),
-              _refuelStat(label: '₹/${t.t('unit_litre_short') ?? 'L'}', value: '₹${pricePerLiter.toStringAsFixed(1)}'),
               _refuelStat(
-                // Full tank cost is an estimate — label the stat
-                // "Estimate" and prefix the figure with a tilde so the
-                // driver doesn't take the rupee number as the precise
-                // amount the pump will charge.
+                // For full tank cost is also an estimate — relabel the
+                // stat "Estimate" with a "~" prefix to drive that home.
                 label: isFullTank
                     ? (t.t('refuel_estimate_label') ?? 'Estimate')
                     : (t.t('refuel_total_label') ?? 'Total'),
@@ -3427,19 +3427,25 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                         color: Colors.white,
                       ),
                     ),
-                    if (pricePerL != null || isFullTank)
+                    if (fillL != null || fillCost != null || isFullTank)
                       Text(
-                        // Full tank → "Full tank · Est. ₹X" (cost as estimate,
-                        // no L; the pump auto-stops at brim and the planner's
-                        // litre number isn't reliable for the driver to act on).
-                        // Partial → exact litres + price/L like before.
+                        // Full tank → "Full tank · ~200 L · ~₹17,000" (both
+                        // litres and cost as estimates; the pump auto-stops
+                        // at brim so neither is the precise actual figure).
+                        // Partial → exact "100 L · ₹9,200" (no ₹/L — that's
+                        // a receipt-check signal, not a plan figure).
                         isFullTank
-                            ? (fillCost != null && fillCost > 0
-                                ? '${t.t('fill_full') ?? 'Full tank'} · ${t.t('refuel_est_prefix') ?? '~₹'}${fillCost.toStringAsFixed(0)}'
-                                : (t.t('fill_full') ?? 'Full tank'))
-                            : (fillL != null && pricePerL != null
-                                ? '${fillL.toStringAsFixed(0)} $litreShort @ ₹${pricePerL.toStringAsFixed(1)}/$litreShort'
-                                : (pricePerL != null ? '₹${pricePerL.toStringAsFixed(1)}/$litreShort' : '')),
+                            ? [
+                                t.t('fill_full') ?? 'Full tank',
+                                if (fillL != null) '~${fillL.toStringAsFixed(0)} $litreShort',
+                                if (fillCost != null && fillCost > 0)
+                                  '~₹${fillCost.toStringAsFixed(0)}',
+                              ].join(' · ')
+                            : [
+                                if (fillL != null) '${fillL.toStringAsFixed(0)} $litreShort',
+                                if (fillCost != null && fillCost > 0)
+                                  '₹${fillCost.toStringAsFixed(0)}',
+                              ].join(' · '),
                         style: GoogleFonts.inter(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
