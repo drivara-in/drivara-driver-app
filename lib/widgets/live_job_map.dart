@@ -20,6 +20,8 @@ class LiveJobMap extends StatefulWidget {
     this.onFuelStationTap,
     this.plannedFuelStops,
     this.onPlannedFuelStopTap,
+    this.serviceCenters,
+    this.onServiceCenterTap,
   });
 
   final List<Map<String, dynamic>>? fuelStations;
@@ -29,6 +31,13 @@ class LiveJobMap extends StatefulWidget {
   /// action ('fill_full' | 'fill_partial'), distanceFromStartKm, etc.
   final List<Map<String, dynamic>>? plannedFuelStops;
   final Function(Map<String, dynamic>)? onPlannedFuelStopTap;
+  /// Authorised service centers near the vehicle (truck-make filtered).
+  /// Same shape as fuelStations: name, address, latitude, longitude.
+  /// Markers render in indigo so drivers can tell them apart from the
+  /// orange fuel pins, and tap fires onServiceCenterTap (parent hands
+  /// off to Google Maps for navigation).
+  final List<Map<String, dynamic>>? serviceCenters;
+  final Function(Map<String, dynamic>)? onServiceCenterTap;
 
   @override
   State<LiveJobMap> createState() => _LiveJobMapState();
@@ -102,12 +111,14 @@ class _LiveJobMapState extends State<LiveJobMap> {
     
     bool fuelChanged = widget.fuelStations != oldWidget.fuelStations;
     bool plannedFuelChanged = widget.plannedFuelStops != oldWidget.plannedFuelStops;
+    bool serviceChanged = widget.serviceCenters != oldWidget.serviceCenters;
 
     if (widget.job != oldWidget.job ||
         widget.vehicle != oldWidget.vehicle ||
         fuelChanged ||
-        plannedFuelChanged) {
-      _parseJobData(refitBounds: fuelChanged);
+        plannedFuelChanged ||
+        serviceChanged) {
+      _parseJobData(refitBounds: fuelChanged || serviceChanged);
     }
     _loadMapStyle();
   }
@@ -326,6 +337,31 @@ class _LiveJobMapState extends State<LiveJobMap> {
              zIndex: 1,
            ));
         }
+      }
+    }
+
+    // 4b. Service Centers — same shape as fuel stations but rendered
+    //     in violet so drivers can tell them apart at a glance.
+    if (widget.serviceCenters != null) {
+      for (var sc in widget.serviceCenters!) {
+        final lat = (sc['latitude'] as num?)?.toDouble();
+        final lng = (sc['longitude'] as num?)?.toDouble();
+        if (lat == null || lng == null) continue;
+        markers.add(Marker(
+          markerId: MarkerId('svc_${sc['place_id'] ?? '${lat}_$lng'}'),
+          position: LatLng(lat, lng),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
+          infoWindow: InfoWindow(
+            title: (sc['name'] ?? 'Service centre').toString(),
+            snippet: Provider.of<LocalizationProvider>(context, listen: false).t('tap_to_navigate'),
+            onTap: () {
+              if (widget.onServiceCenterTap != null) {
+                widget.onServiceCenterTap!(sc);
+              }
+            },
+          ),
+          zIndex: 1,
+        ));
       }
     }
 

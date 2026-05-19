@@ -35,7 +35,7 @@ import 'theme/app_theme.dart';
 import 'providers/theme_provider.dart';
 import 'services/job_stream_service.dart';
 import 'services/find_fuel_service.dart';
-import 'widgets/service_center_sheet.dart';
+import 'services/find_service_center_service.dart';
 import 'services/notification_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
@@ -66,6 +66,7 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
   bool _isActionLoading = false;
   int? _selectedStopIndex;
   List<Map<String, dynamic>>? _fuelStations;
+  List<Map<String, dynamic>>? _serviceCenters;
 
   // Fuel-pump proximity state. We compute distance from the live GPS to the
   // first planned fuel stop on every dashboard tick / SSE update; when the
@@ -1277,10 +1278,11 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     );
   }
 
-  /// Pop a bottom sheet that lists authorised service centres near the
-  /// driver's current location, branded to the active vehicle's make
-  /// when known. Each row taps off to Google Maps for navigation.
-  void _showServiceCenters() {
+  /// Find nearby truck service centers and drop them on the live map
+  /// as violet markers. Mirrors the fuel-station flow: a snackbar
+  /// confirms how many were found, and each marker's InfoWindow taps
+  /// through to Google Maps for turn-by-turn.
+  void _showServiceCenters() async {
     final vehicle = (_dashboardData?['vehicle'] ?? const {}) as Map;
     final loc = vehicle['location'];
     if (loc == null || (loc['lat'] ?? 0) == 0 || (loc['lng'] ?? 0) == 0) {
@@ -1290,19 +1292,34 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
       ));
       return;
     }
-    final make = vehicle['make']?.toString();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => ServiceCenterSheet(
-        driverLocation: LatLng(
-          (loc['lat'] as num).toDouble(),
-          (loc['lng'] as num).toDouble(),
-        ),
-        vehicleMake: make,
-      ),
-    );
+    final t = Provider.of<LocalizationProvider>(context, listen: false);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(t.t('service_centers_searching') ?? 'Searching nearby service centers…'),
+      duration: const Duration(milliseconds: 1500),
+    ));
+    try {
+      final make = vehicle['make']?.toString();
+      final svc = FindServiceCenterService();
+      final centers = await svc.findNearby(
+        LatLng((loc['lat'] as num).toDouble(), (loc['lng'] as num).toDouble()),
+        make: make,
+      );
+      if (!mounted) return;
+      if (centers.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(t.t('service_centers_empty') ?? 'No service centers found nearby.'),
+        ));
+        return;
+      }
+      setState(() => _serviceCenters = centers);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('${t.t('service_centers_title') ?? 'Nearby service centers'} (${centers.length})'),
+        duration: const Duration(seconds: 3),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
   }
 
   void _showFuelOptions() async {
@@ -1565,6 +1582,17 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                   job: _job,
                   vehicle: vehicle,
                   fuelStations: _fuelStations,
+                  serviceCenters: _serviceCenters,
+                  onServiceCenterTap: (sc) async {
+                    final lat = (sc['latitude'] as num?)?.toDouble();
+                    final lng = (sc['longitude'] as num?)?.toDouble();
+                    if (lat == null || lng == null) return;
+                    final uri = Uri.parse(
+                        'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving');
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  },
                   // Feed the server's live fuel plan (stops) into the map so
                   // the driver sees orange pump markers at each planned refuel,
                   // not just the text card below.
