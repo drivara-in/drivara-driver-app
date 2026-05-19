@@ -98,6 +98,13 @@ class _OtpPageState extends State<OtpPage> {
         //    navigation if push isn't configured on this device.
         unawaited(MessagingService().registerAfterLogin());
 
+        // 3b. Push the device's selected language to the server so push
+        //     notifications (fuel/fastag debit alerts, etc.) render in
+        //     the driver's chosen locale. Fire-and-forget; setLocale
+        //     swallows network errors.
+        unawaited(Provider.of<LocalizationProvider>(context, listen: false)
+            .setLocale(Provider.of<LocalizationProvider>(context, listen: false).locale));
+
         // 4. Fetch Active Job
         await _checkActiveJob();
       } else {

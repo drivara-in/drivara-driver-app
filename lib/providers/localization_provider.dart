@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/translation_service.dart';
+import '../api_config.dart';
 
 class LocalizationProvider extends ChangeNotifier {
   Locale _locale = const Locale('en', 'US');
@@ -28,9 +29,22 @@ class LocalizationProvider extends ChangeNotifier {
     if (!['en', 'hi', 'te', 'ml', 'kn', 'ta'].contains(locale.languageCode)) return;
     _locale = locale;
     notifyListeners();
-    
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('language_code', locale.languageCode);
+
+    // Push the pick to the server so the notification service can render
+    // pushes (fuel/fastag debit alerts, etc.) in the same language. Best
+    // effort — if the driver is offline or not yet logged in, the value
+    // gets refreshed next time setLocale is called.
+    try {
+      await ApiConfig.dio.patch(
+        '/driver/me/locale',
+        data: {'locale': locale.languageCode},
+      );
+    } catch (_) {
+      // Silently ignore — the next setLocale call (or login) will retry.
+    }
   }
 
   // Simple key-value map for strings
