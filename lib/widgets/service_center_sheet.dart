@@ -90,7 +90,20 @@ class _ServiceCenterSheetState extends State<ServiceCenterSheet> {
                           color: Colors.indigo.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: const Icon(Icons.build_circle, color: Colors.indigo, size: 22),
+                        child: const Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Icon(Icons.local_shipping, color: Colors.indigo, size: 20),
+                            Positioned(
+                              right: 4, bottom: 4,
+                              child: CircleAvatar(
+                                radius: 6,
+                                backgroundColor: Colors.white,
+                                child: Icon(Icons.build, color: Colors.indigo, size: 8),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -179,7 +192,20 @@ class _ServiceCenterSheetState extends State<ServiceCenterSheet> {
                       color: Colors.indigo.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.car_repair, color: Colors.indigo, size: 20),
+                    child: const Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Icon(Icons.local_shipping, color: Colors.indigo, size: 20),
+                        Positioned(
+                          right: 4, bottom: 4,
+                          child: CircleAvatar(
+                            radius: 6,
+                            backgroundColor: Colors.white,
+                            child: Icon(Icons.build, color: Colors.indigo, size: 8),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
