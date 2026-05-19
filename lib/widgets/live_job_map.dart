@@ -342,14 +342,17 @@ class _LiveJobMapState extends State<LiveJobMap> {
 
     // 4b. Service Centers — same shape as fuel stations but rendered
     //     in violet so drivers can tell them apart at a glance.
+    List<LatLng> servicePositions = [];
     if (widget.serviceCenters != null) {
       for (var sc in widget.serviceCenters!) {
         final lat = (sc['latitude'] as num?)?.toDouble();
         final lng = (sc['longitude'] as num?)?.toDouble();
         if (lat == null || lng == null) continue;
+        final pos = LatLng(lat, lng);
+        servicePositions.add(pos);
         markers.add(Marker(
           markerId: MarkerId('svc_${sc['place_id'] ?? '${lat}_$lng'}'),
-          position: LatLng(lat, lng),
+          position: pos,
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
           infoWindow: InfoWindow(
             title: (sc['name'] ?? 'Service centre').toString(),
@@ -422,10 +425,23 @@ class _LiveJobMapState extends State<LiveJobMap> {
        if (vehiclePos != null) {
           fuelPositions.add(vehiclePos);
        }
-       
+
        if (_overrideDestPos == null) {
           _fitPolylineBounds(fuelPositions);
        }
+    }
+
+    // Auto-Fit for service centers — same trick as fuel: when the
+    // driver runs the search, pan/zoom so every violet marker (plus
+    // the truck) is visible at once. Skipped while a destination
+    // override is active so we don't fight the in-progress nav view.
+    if (servicePositions.isNotEmpty && refitBounds) {
+      if (vehiclePos != null) {
+        servicePositions.add(vehiclePos);
+      }
+      if (_overrideDestPos == null) {
+        _fitPolylineBounds(servicePositions);
+      }
     }
   }
 
