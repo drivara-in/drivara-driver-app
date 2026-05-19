@@ -298,14 +298,14 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
   // Returns true when we've already shown the stoppage sheet at roughly the
   // current location. No time-based expiry — once the driver has explained
   // the halt at this spot, we don't ask again until they actually move
-  // ≥500 m. The truck can sit there for days; one prompt is enough.
+  // ≥100 m. The truck can sit there for days; one prompt is enough.
   bool _wasRecentlyPromptedNearby(double? vLat, double? vLng) {
     if (vLat == null || vLng == null) return false;
     if (_lastStoppagePromptLat == null || _lastStoppagePromptLng == null) return false;
     final km = _getHaversineDistance(
       vLat, vLng, _lastStoppagePromptLat!, _lastStoppagePromptLng!,
     );
-    return km < 0.5;
+    return km < 0.1;
   }
 
   Future<void> _recordStoppagePrompt(double vLat, double vLng) async {
@@ -582,14 +582,16 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
 
               // "Stopped" means the engine is actually off, not just the key.
               // iAlert reports ignition=true the moment the key reaches
-              // position 1 (electrics on), but the engine can still be
-              // dead silent. Prefer engine_speed (RPM > 100 == running) and
-              // fall back to ignition only when the sensor doesn't report
-              // RPM for this vehicle.
-              final num? rpmRaw = _parseNum(data['engine_speed']);
-              final double? engineRpm = rpmRaw?.toDouble();
-              final bool isStopped = engineRpm != null
-                  ? engineRpm <= 100
+              // The server emits the device's direct status code as
+              // the source of truth: 0 = engine off, 1 = idle,
+              // 2 = moving, 3 = stopped (key on). 0 + 3 both mean the
+              // truck is physically halted; idle is engine-on traffic
+              // and shouldn't trigger a "why did you stop?" prompt.
+              // Falls back to ignition/RPM only if status is missing.
+              final num? statusRaw = _parseNum(data['status']);
+              final int? engineStatus = statusRaw?.toInt();
+              final bool isStopped = engineStatus != null
+                  ? (engineStatus == 0 || engineStatus == 3)
                   : (ignition == false);
 
               if (isStopped && actions.isNotEmpty) {
@@ -648,6 +650,16 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
 
               // --- Unplanned Stoppage Reason Detection ---
               if (isStopped && !_isNearAnyPlannedStop(vehicle)) {
+                  // Prefer the server-computed stoppage start (true
+                  // first-tick of the status==0/3 run, robust against
+                  // app restart and RPM/ignition flap). Fall back to
+                  // local clock only if the server hasn't reported a
+                  // value yet (e.g. stale snapshot on first SSE event).
+                  final serverStoppedAt = data['stoppage_started_at']?.toString();
+                  if (serverStoppedAt != null && serverStoppedAt.isNotEmpty) {
+                    final parsed = DateTime.tryParse(serverStoppedAt);
+                    if (parsed != null) _unplannedStopSince = parsed;
+                  }
                   _unplannedStopSince ??= DateTime.now();
                   final elapsed = DateTime.now().difference(_unplannedStopSince!);
                   if (elapsed.inMinutes >= 15 && !_stoppageReasonRequested) {
