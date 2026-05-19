@@ -35,6 +35,7 @@ import 'theme/app_theme.dart';
 import 'providers/theme_provider.dart';
 import 'services/job_stream_service.dart';
 import 'services/find_fuel_service.dart';
+import 'widgets/service_center_sheet.dart';
 import 'services/notification_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
@@ -1276,6 +1277,34 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     );
   }
 
+  /// Pop a bottom sheet that lists authorised service centres near the
+  /// driver's current location, branded to the active vehicle's make
+  /// when known. Each row taps off to Google Maps for navigation.
+  void _showServiceCenters() {
+    final vehicle = (_dashboardData?['vehicle'] ?? const {}) as Map;
+    final loc = vehicle['location'];
+    if (loc == null || (loc['lat'] ?? 0) == 0 || (loc['lng'] ?? 0) == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(Provider.of<LocalizationProvider>(context, listen: false)
+                .t('vehicle_location_unknown') ?? 'Vehicle location not available yet'),
+      ));
+      return;
+    }
+    final make = vehicle['make']?.toString();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ServiceCenterSheet(
+        driverLocation: LatLng(
+          (loc['lat'] as num).toDouble(),
+          (loc['lng'] as num).toDouble(),
+        ),
+        vehicleMake: make,
+      ),
+    );
+  }
+
   void _showFuelOptions() async {
       final vehicle = _dashboardData?['vehicle'] ?? {};
       final loc = vehicle['location'];
@@ -1620,6 +1649,22 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
             ),
 
             // 3. Find Fuel Button (Floating on Map) - Moved BEFORE sheet so sheet covers it
+            // Left-side FAB column. Right column is full of action FABs;
+            // the new "service centers" button lands on the left so it
+            // doesn't push existing icons further down the screen.
+            Positioned(
+              left: 16,
+              top: 130,
+              child: FloatingActionButton(
+                heroTag: 'serviceCenterBtn',
+                onPressed: _showServiceCenters,
+                mini: true,
+                backgroundColor: Colors.indigo,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: const Icon(Icons.car_repair, color: Colors.white),
+              ),
+            ),
+
             Positioned(
               right: 16,
               top: 130, // Below header
