@@ -40,7 +40,11 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
   double? _lng;
 
   // File Upload State
-  File? _selectedBillImage;
+  // Multi-image: drivers can attach several photos per expense (e.g. the
+  // bill + the pump display + the odometer reading). Earlier versions
+  // only kept one File; this list preserves picker order.
+  final List<File> _selectedBillImages = [];
+  static const int _maxImages = 10;
   final ImagePicker _picker = ImagePicker();
 
   @override
@@ -128,20 +132,40 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
 
   Future<void> _pickImage(ImageSource source) async {
     try {
-      final XFile? pickedFile = await _picker.pickImage(source: source, maxWidth: 1280, maxHeight: 1280, imageQuality: 70);
-      if (pickedFile != null) {
-        setState(() {
-          _selectedBillImage = File(pickedFile.path);
-        });
+      if (source == ImageSource.camera) {
+        // Camera always returns one shot — let the driver capture
+        // additional photos by tapping Camera again.
+        final XFile? pickedFile = await _picker.pickImage(
+            source: ImageSource.camera, maxWidth: 1280, maxHeight: 1280, imageQuality: 70);
+        if (pickedFile != null) {
+          setState(() {
+            if (_selectedBillImages.length < _maxImages) {
+              _selectedBillImages.add(File(pickedFile.path));
+            }
+          });
+        }
+      } else {
+        // Gallery: multi-select. pickMultiImage returns 0..N XFiles.
+        final picked = await _picker.pickMultiImage(maxWidth: 1280, maxHeight: 1280, imageQuality: 70);
+        if (picked.isNotEmpty) {
+          setState(() {
+            for (final f in picked) {
+              if (_selectedBillImages.length >= _maxImages) break;
+              _selectedBillImages.add(File(f.path));
+            }
+          });
+        }
       }
     } catch (e) {
       debugPrint("Error picking image: $e");
     }
   }
 
-  void _removeImage() {
+  void _removeImageAt(int index) {
     setState(() {
-      _selectedBillImage = null;
+      if (index >= 0 && index < _selectedBillImages.length) {
+        _selectedBillImages.removeAt(index);
+      }
     });
   }
 
@@ -156,7 +180,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
      final selectedTypeObj = _expenseTypes.firstWhere((e) => e['name'] == _selectedType, orElse: () => null);
      final bool isMandatory = selectedTypeObj != null && (selectedTypeObj['is_bill_mandatory'] == true || selectedTypeObj['mandate'] == true);
 
-     if (isMandatory && _selectedBillImage == null) {
+     if (isMandatory && _selectedBillImages.isEmpty) {
         setState(() => _errorText = t.t('bill_required_error'));
         return;
      }
@@ -179,22 +203,25 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
      try {
         debugPrint("Submitting expense for Job: ${widget.job['id']}. Job Keys: ${widget.job.keys.toList()}");
         
-        String? fileId;
-        if (_selectedBillImage != null) {
-           final uuid = DateTime.now().millisecondsSinceEpoch.toString(); // Simple unique ID
-           final ext = _selectedBillImage!.path.split('.').last;
-           final orgId = widget.job['org_id'] ?? widget.job['orgId']; // Try both casing
-           debugPrint("Detected OrgID: $orgId");
-
+        // Upload every selected image sequentially so we keep the picker
+        // order and don't blast S3 with parallel writes from a phone.
+        // Each upload returns an upload UUID we collect into fileIds.
+        final List<String> fileIds = [];
+        final orgId = widget.job['org_id'] ?? widget.job['orgId'];
+        debugPrint("Detected OrgID: $orgId, attachments: ${_selectedBillImages.length}");
+        for (int i = 0; i < _selectedBillImages.length; i++) {
+           final f = _selectedBillImages[i];
+           final uuid = '${DateTime.now().millisecondsSinceEpoch}_$i';
+           final ext = f.path.split('.').last;
+           String? fid;
            if (orgId != null) {
               final customKey = 'orgs/$orgId/jobs/expenses/$uuid.$ext';
-              debugPrint("Uploading file to custom key: $customKey");
-              fileId = await ApiConfig.uploadFile(_selectedBillImage!.path, customKey: customKey);
+              fid = await ApiConfig.uploadFile(f.path, customKey: customKey);
            } else {
-              debugPrint("Uploading file without custom key");
-              fileId = await ApiConfig.uploadFile(_selectedBillImage!.path);
+              fid = await ApiConfig.uploadFile(f.path);
            }
-           debugPrint("File Upload Success. ID: $fileId");
+           if (fid != null && fid.isNotEmpty) fileIds.add(fid);
+           debugPrint("Upload ${i + 1}/${_selectedBillImages.length} OK: $fid");
         }
 
         final payload = {
@@ -204,7 +231,11 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
            'timezone': DateTime.now().timeZoneName,
            'description': _descController.text,
            'location': _locationController.text.isNotEmpty ? _locationController.text : "Manual Entry",
-           'file_upload_id': fileId,
+           // Keep file_upload_id (singular) for older server builds, and
+           // also send file_upload_ids (plural) which the new server uses
+           // as the canonical multi-attachment list.
+           'file_upload_id': fileIds.isNotEmpty ? fileIds.first : null,
+           'file_upload_ids': fileIds,
            'latitude': _lat,
            'longitude': _lng,
            if (_qtyController.text.isNotEmpty) 'qty': double.tryParse(_qtyController.text),
@@ -441,66 +472,54 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                               ),
                               if (isMandatory)
                                 const Text(" *", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                              if (_selectedBillImage != null)
+                              if (_selectedBillImages.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.only(left: 8.0),
                                   child: Container(
-                                    width: 20, height: 20,
-                                    decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
-                                    child: const Icon(Icons.check, size: 14, color: Colors.white),
+                                    constraints: const BoxConstraints(minWidth: 20),
+                                    height: 20,
+                                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      '${_selectedBillImages.length}',
+                                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+                                    ),
                                   ),
                                 )
                             ],
                           ),
                           const SizedBox(height: 8),
-                          if (_selectedBillImage != null)
-                            Stack(
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Image.file(_selectedBillImage!, height: 150, width: double.infinity, fit: BoxFit.cover),
-                                ),
-                                Positioned(
-                                  top: 8, right: 8,
-                                  child: InkWell(
-                                    onTap: _removeImage,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(4),
-                                      decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
-                                      child: const Icon(Icons.close, color: Colors.white, size: 20),
-                                    ),
-                                  ),
-                                )
-                              ],
-                            )
-                          else
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: OutlinedButton.icon(
-                                    onPressed: () => _pickImage(ImageSource.camera),
-                                    icon: const Icon(Icons.camera_alt),
-                                    label: Text(t.t('camera')),
-                                    style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: OutlinedButton.icon(
-                                    onPressed: () => _pickImage(ImageSource.gallery),
-                                    icon: const Icon(Icons.photo_library),
-                                    label: Text(t.t('gallery')),
-                                    style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                    ),
-                                  ),
-                                ),
-                              ],
+                          // Horizontal strip of selected images with a tail "+ Add" tile
+                          // when we're still under the cap. Removing one shrinks the
+                          // strip in-place. Tapping a tile doesn't open a viewer —
+                          // long-press / X removes; tap doesn't navigate.
+                          SizedBox(
+                            height: 110,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: _selectedBillImages.length + (_selectedBillImages.length < _maxImages ? 1 : 0),
+                              separatorBuilder: (_, __) => const SizedBox(width: 10),
+                              itemBuilder: (context, i) {
+                                if (i >= _selectedBillImages.length) {
+                                  return _AddImageTile(
+                                    onCamera: () => _pickImage(ImageSource.camera),
+                                    onGallery: () => _pickImage(ImageSource.gallery),
+                                    cameraLabel: t.t('camera') ?? 'Camera',
+                                    galleryLabel: t.t('gallery') ?? 'Gallery',
+                                  );
+                                }
+                                return _ImagePreviewTile(
+                                  file: _selectedBillImages[i],
+                                  index: i,
+                                  onRemove: () => _removeImageAt(i),
+                                );
+                              },
                             ),
+                          ),
                         ],
                       );
                     }
@@ -534,6 +553,94 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
               )
           ],
         ),
+      ),
+    );
+  }
+}
+
+
+/// Square preview tile in the attached-images strip. Renders the file with
+/// a corner X button to remove it. Kept stateless so the parent re-builds
+/// just by setState'ing the underlying list.
+class _ImagePreviewTile extends StatelessWidget {
+  const _ImagePreviewTile({required this.file, required this.index, required this.onRemove});
+  final File file;
+  final int index;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.file(file, width: 110, height: 110, fit: BoxFit.cover),
+        ),
+        Positioned(
+          top: 4, right: 4,
+          child: InkWell(
+            onTap: onRemove,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+              child: const Icon(Icons.close, color: Colors.white, size: 16),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// "+" tile at the end of the strip. Tapping picks Camera vs Gallery via a
+/// small bottom-sheet menu — keeps the row compact and matches the rest of
+/// the picker patterns in the app.
+class _AddImageTile extends StatelessWidget {
+  const _AddImageTile({
+    required this.onCamera,
+    required this.onGallery,
+    required this.cameraLabel,
+    required this.galleryLabel,
+  });
+  final VoidCallback onCamera;
+  final VoidCallback onGallery;
+  final String cameraLabel;
+  final String galleryLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () {
+        showModalBottomSheet(
+          context: context,
+          builder: (_) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.camera_alt),
+                  title: Text(cameraLabel),
+                  onTap: () { Navigator.pop(context); onCamera(); },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.photo_library),
+                  title: Text(galleryLabel),
+                  onTap: () { Navigator.pop(context); onGallery(); },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      child: Container(
+        width: 110, height: 110,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Theme.of(context).dividerColor),
+        ),
+        alignment: Alignment.center,
+        child: const Icon(Icons.add, size: 32),
       ),
     );
   }

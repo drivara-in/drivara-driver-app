@@ -437,104 +437,18 @@ class _ExpenseListSheetState extends State<ExpenseListSheet>
             ),
           ],
 
-          if (expense['attachment_url'] != null) ...[
+          // Multi-attachment view. Prefer server-provided attachment_urls
+          // (new shape) and fall back to a single-element list built from
+          // attachment_url (older builds). Counter shows the total; tap
+          // opens a swipeable gallery.
+          if (() {
+            final urls = expense['attachment_urls'];
+            if (urls is List && urls.isNotEmpty) return true;
+            return expense['attachment_url'] != null;
+          }()) ...[
               const SizedBox(height: 8),
               InkWell(
-                onTap: () async {
-                  String urlString = expense['attachment_url']?.toString() ?? '';
-                  final uploadId = expense['file_upload_id']?.toString();
-                  
-                  // If we have an upload ID, try to get a fresh signed URL first
-                  if (uploadId != null && uploadId.isNotEmpty) {
-                      try {
-                        final res = await ApiConfig.dio.get('/uploads/$uploadId/url');
-                        if (res.statusCode == 200 && res.data != null) {
-                           final signed = res.data['url'] ?? res.data['publicUrl'] ?? res.data['srcUrl'];
-                           if (signed != null && signed.toString().isNotEmpty) {
-                              urlString = signed.toString();
-                           }
-                        }
-                      } catch (e) {
-                        debugPrint("Error fetching signed URL: $e");
-                        // Fallback to original urlString
-                      }
-                  }
-
-                  if (urlString.isEmpty) return;
-
-                  if (urlString.startsWith('/')) {
-                     final baseUrl = ApiConfig.baseUrl; 
-                     final rootUrl = baseUrl.endsWith('/api') 
-                        ? baseUrl.substring(0, baseUrl.length - 4) 
-                        : baseUrl;
-                     
-                     urlString = '$rootUrl$urlString';
-                  }
-                  
-                  final uri = Uri.parse(urlString);
-                  
-                  // Simple check for PDF - launch externally
-                  if (urlString.toLowerCase().contains('.pdf')) {
-                       if (await canLaunchUrl(uri)) {
-                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                       }
-                       return;
-                  }
-
-                  // For images, show in-app dialog
-                  final token = await ApiConfig.getAuthToken();
-                  if (context.mounted) {
-                    showDialog(
-                      context: context,
-                      builder: (ctx) => Dialog(
-                        backgroundColor: Colors.transparent,
-                        insetPadding: const EdgeInsets.all(16),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            InteractiveViewer(
-                              minScale: 0.5,
-                              maxScale: 4.0,
-                              child: Image.network(
-                                urlString,
-                                // Remove headers as signed URLs (S3) conflict with Bearer tokens
-                                // headers: token != null ? {'Authorization': 'Bearer $token'} : null,
-                                loadingBuilder: (context, child, loadingProgress) {
-                                  if (loadingProgress == null) return child;
-                                  return const Center(child: CircularProgressIndicator());
-                                },
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Container(
-                                    color: Colors.white,
-                                    padding: const EdgeInsets.all(20),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(Icons.broken_image, size: 40, color: Colors.grey),
-                                        const SizedBox(height: 10),
-                                        Text(t.t('failed_load_image') ?? 'Failed to load image', style: const TextStyle(color: Colors.black)),
-                                        const SizedBox(height: 4),
-                                        Text('${t.t('error_label') ?? 'Error'}: $error', style: const TextStyle(color: Colors.black, fontSize: 10)),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                            Positioned(
-                              top: 0,
-                              right: 0,
-                              child: IconButton(
-                                icon: const Icon(Icons.close, color: Colors.white, size: 30),
-                                onPressed: () => Navigator.of(ctx).pop(),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }
-                },
+                onTap: () => _openAttachmentGallery(context, expense, t),
                 child: Row(
                   children: [
                     Icon(
@@ -543,14 +457,24 @@ class _ExpenseListSheetState extends State<ExpenseListSheet>
                       color: Theme.of(context).primaryColor,
                     ),
                     const SizedBox(width: 8),
-                    Text(
-                      t.t('view_bill'),
-                      style: AppTextStyles.label.copyWith(
-                        fontSize: 12,
-                        color: Theme.of(context).primaryColor,
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
+                    Builder(builder: (_) {
+                      final urls = (expense['attachment_urls'] is List)
+                          ? (expense['attachment_urls'] as List).whereType<String>().toList()
+                          : <String>[];
+                      final count = urls.isEmpty
+                          ? (expense['attachment_url'] != null ? 1 : 0)
+                          : urls.length;
+                      final base = t.t('view_bill') ?? 'View bill';
+                      final label = count > 1 ? '$base ($count)' : base;
+                      return Text(
+                        label,
+                        style: AppTextStyles.label.copyWith(
+                          fontSize: 12,
+                          color: Theme.of(context).primaryColor,
+                          decoration: TextDecoration.underline,
+                        ),
+                      );
+                    }),
                   ],
                 ),
               ),
@@ -643,6 +567,165 @@ class _ExpenseListSheetState extends State<ExpenseListSheet>
           ),
         ],
       ),
+    );
+  }
+}
+
+// Resolves a single attachment URL string to a fully-qualified HTTP URL.
+// When the server returns "/api/uploads/get/<uuid>" we hit the server
+// for a fresh signed URL — that endpoint 302-redirects to the actual
+// S3/imgproxy URL with a short TTL. For absolute URLs (https://...) we
+// return them as-is.
+Future<String?> _resolveAttachmentUrl(String raw) async {
+  if (raw.isEmpty) return null;
+  if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+  // Try to extract the upload UUID and ask for a signed URL.
+  final m = RegExp(r'/api/uploads/get/([0-9a-f-]{36})').firstMatch(raw);
+  if (m != null) {
+    final uploadId = m.group(1)!;
+    try {
+      final res = await ApiConfig.dio.get('/uploads/$uploadId/url');
+      if (res.statusCode == 200 && res.data != null) {
+        final signed = res.data['url'] ?? res.data['publicUrl'] ?? res.data['srcUrl'];
+        if (signed != null && signed.toString().isNotEmpty) return signed.toString();
+      }
+    } catch (e) {
+      debugPrint('[expense] signed URL fetch failed: $e');
+    }
+  }
+  // Last resort: stitch onto the API base.
+  final baseUrl = ApiConfig.baseUrl;
+  final rootUrl = baseUrl.endsWith('/api')
+      ? baseUrl.substring(0, baseUrl.length - 4)
+      : baseUrl;
+  return '$rootUrl$raw';
+}
+
+// Opens a swipeable gallery dialog for the expense's attachments. Single
+// image still renders the same InteractiveViewer as before; multi-image
+// wraps it in a PageView so the driver can swipe through and see the
+// pump display, the bill, and the odometer side-by-side. PDFs are
+// opened externally (the in-app viewer is image-only).
+void _openAttachmentGallery(BuildContext context, Map<String, dynamic> expense, LocalizationProvider t) async {
+  final List<String> rawUrls = (expense['attachment_urls'] is List)
+      ? (expense['attachment_urls'] as List).whereType<String>().toList()
+      : <String>[];
+  if (rawUrls.isEmpty && expense['attachment_url'] != null) {
+    rawUrls.add(expense['attachment_url'].toString());
+  }
+  if (rawUrls.isEmpty) return;
+
+  // Resolve URLs in parallel — each may hit /uploads/:id/url for a signed
+  // URL. Skip nulls (resolution failure) so the gallery still shows the
+  // others.
+  final resolved = await Future.wait(rawUrls.map(_resolveAttachmentUrl));
+  final urls = resolved.whereType<String>().toList();
+  if (urls.isEmpty) return;
+
+  // PDF? Just launch the first one externally — matches prior behaviour.
+  if (urls.first.toLowerCase().contains('.pdf')) {
+    final uri = Uri.parse(urls.first);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+    return;
+  }
+
+  if (!context.mounted) return;
+  showDialog(
+    context: context,
+    builder: (ctx) => Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(16),
+      child: _AttachmentGallery(
+        urls: urls,
+        failedLabel: t.t('failed_load_image') ?? 'Failed to load image',
+        errorLabel: t.t('error_label') ?? 'Error',
+      ),
+    ),
+  );
+}
+
+class _AttachmentGallery extends StatefulWidget {
+  const _AttachmentGallery({required this.urls, required this.failedLabel, required this.errorLabel});
+  final List<String> urls;
+  final String failedLabel;
+  final String errorLabel;
+
+  @override
+  State<_AttachmentGallery> createState() => _AttachmentGalleryState();
+}
+
+class _AttachmentGalleryState extends State<_AttachmentGallery> {
+  int _index = 0;
+  late final PageController _controller = PageController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        PageView.builder(
+          controller: _controller,
+          itemCount: widget.urls.length,
+          onPageChanged: (i) => setState(() => _index = i),
+          itemBuilder: (context, i) => InteractiveViewer(
+            minScale: 0.5,
+            maxScale: 4.0,
+            child: Image.network(
+              widget.urls[i],
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return const Center(child: CircularProgressIndicator());
+              },
+              errorBuilder: (context, error, _) => Container(
+                color: Colors.white,
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.broken_image, size: 40, color: Colors.grey),
+                    const SizedBox(height: 10),
+                    Text(widget.failedLabel, style: const TextStyle(color: Colors.black)),
+                    const SizedBox(height: 4),
+                    Text('${widget.errorLabel}: $error', style: const TextStyle(color: Colors.black, fontSize: 10)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          top: 0, right: 0,
+          child: IconButton(
+            icon: const Icon(Icons.close, color: Colors.white, size: 30),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
+        if (widget.urls.length > 1)
+          Positioned(
+            bottom: 16, left: 0, right: 0,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${_index + 1} / ${widget.urls.length}',
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
