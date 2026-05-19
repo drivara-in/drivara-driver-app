@@ -1311,7 +1311,12 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
         ));
         return;
       }
-      setState(() => _serviceCenters = centers);
+      // Clear fuel markers so the map shows only one kind of result at
+      // a time — switching modes should feel like a mode switch.
+      setState(() {
+        _serviceCenters = centers;
+        _fuelStations = null;
+      });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('${t.t('service_centers_title') ?? 'Nearby service centers'} (${centers.length})'),
         duration: const Duration(seconds: 3),
@@ -1353,9 +1358,11 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
          
          if (!mounted) return;
 
-         // Update Map Markers
+         // Update Map Markers — and clear service-center markers so the
+         // map only ever surfaces one search mode's results at a time.
          setState(() {
             _fuelStations = pumps;
+            _serviceCenters = null;
          });
          
          // Inform user
