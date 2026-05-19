@@ -345,18 +345,26 @@ class _LiveJobMapState extends State<LiveJobMap> {
            final pos = LatLng(lat, lng);
            fuelPositions.add(pos);
 
+           // Build the snippet: "₹92.5/L · Tap to navigate" when the
+           // server returns a price; otherwise just the navigate hint.
+           final priceNum = currStation['price_per_l'];
+           final priceLabel = priceNum is num
+               ? '₹${priceNum.toStringAsFixed(1)}/L · '
+               : '';
+           final navHint = Provider.of<LocalizationProvider>(context, listen: false)
+               .t('tap_to_navigate') ?? 'Tap to navigate';
            markers.add(Marker(
              markerId: MarkerId('station_${currStation['place_id']}'),
              position: pos,
              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueYellow),
              infoWindow: InfoWindow(
                title: currStation['name'],
-               snippet: Provider.of<LocalizationProvider>(context, listen: false).t('tap_to_navigate'),
+               snippet: '$priceLabel$navHint',
                onTap: () {
                  if (widget.onFuelStationTap != null) {
                    widget.onFuelStationTap!(currStation);
                  }
-               }
+               },
              ),
              zIndex: 1,
            ));

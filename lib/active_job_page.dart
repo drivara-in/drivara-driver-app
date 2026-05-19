@@ -1343,13 +1343,11 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
          final service = FindFuelService();
          double lat = (loc['lat'] is String) ? double.tryParse(loc['lat']) ?? 0 : (loc['lat'] as num).toDouble();
          double lng = (loc['lng'] is String) ? double.tryParse(loc['lng']) ?? 0 : (loc['lng'] as num).toDouble();
-         
-         String? routePolyline;
-         if (_job['route_path'] is String) {
-            routePolyline = _job['route_path'];
-         }
 
-         final pumps = await service.findNearbyIndianOil(LatLng(lat, lng), routePolyline: routePolyline);
+         // Pull from our own fuel_outlets table — restricts to the vehicle's
+         // fuel type (HSD/MS) and its active fuel-card provider (IOCL/BPCL),
+         // and returns the latest ₹/L per pump for InfoWindow display.
+         final pumps = await service.findNearbyForJob(_job['id'].toString(), LatLng(lat, lng));
          
          if (pumps.isEmpty) {
             if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Provider.of<LocalizationProvider>(context, listen: false).t('no_pumps_found'))));

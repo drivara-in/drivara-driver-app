@@ -38,6 +38,43 @@ class FindFuelService {
   // Max deviation from route (2km) to consider "on route". Highways exits can be wide.
   static const double MAX_DEVIATION_METERS = 2000.0;
 
+  /// Internal pump list scoped to the active job's vehicle — backed by
+  /// `fuel_outlets` + the latest `fuel_rsp_prices`, NOT Google Places.
+  /// Returns pumps with `price_per_l`, filtered server-side by the
+  /// vehicle's fuel_type (HSD vs MS) and active fuel-card provider
+  /// (IOCL/BPCL). Each entry's shape stays compatible with the existing
+  /// fuel-station marker logic: at minimum `name`, `lat`, `lng`, plus
+  /// the new `price_per_l` and `distance_km` fields.
+  Future<List<Map<String, dynamic>>> findNearbyForJob(String jobId, LatLng location, {double radiusKm = 50}) async {
+    final response = await _dio.get(
+      '/driver/jobs/$jobId/fuel-pumps',
+      queryParameters: {
+        'lat': location.latitude,
+        'lng': location.longitude,
+        'radius_km': radiusKm,
+      },
+    );
+    if (response.statusCode != 200) return [];
+    final pumps = (response.data['pumps'] as List?) ?? const [];
+    return pumps.map<Map<String, dynamic>>((p) {
+      final m = Map<String, dynamic>.from(p as Map);
+      return {
+        'name': m['name'] ?? 'Pump',
+        'address': m['address'] ?? '',
+        'lat': (m['lat'] as num).toDouble(),
+        'lng': (m['lng'] as num).toDouble(),
+        'rating': 0.0,
+        'place_id': m['customer_code']?.toString() ?? '',
+        'provider': m['provider'],
+        'price_per_l': m['price_per_l'],
+        'distance_km': m['distance_km'],
+        // Keep the same `distance_along_route` shape downstream code expects.
+        'distance_along_route': double.infinity,
+        'deviation': 0.0,
+      };
+    }).toList();
+  }
+
   Future<List<Map<String, dynamic>>> findNearbyIndianOil(LatLng location, {String? routePolyline}) async {
     // Backend Endpoint: /api/places/search
     // The backend should proxy this to Google Places API (Text Search)
