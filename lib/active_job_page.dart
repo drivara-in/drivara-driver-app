@@ -1666,29 +1666,47 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
             Positioned(
               left: 16,
               top: 130,
-              child: FloatingActionButton(
-                heroTag: 'serviceCenterBtn',
-                onPressed: _showServiceCenters,
-                mini: true,
-                backgroundColor: Colors.indigo,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                // Material doesn't ship a single "truck repair" glyph,
-                // so stack the truck under a small wrench badge to
-                // convey "truck service" at a glance.
-                child: const Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Icon(Icons.local_shipping, color: Colors.white, size: 22),
-                    Positioned(
-                      right: 0, bottom: 0,
-                      child: CircleAvatar(
-                        radius: 8,
-                        backgroundColor: Colors.white,
-                        child: Icon(Icons.build, color: Colors.indigo, size: 10),
-                      ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FloatingActionButton(
+                    heroTag: 'serviceCenterBtn',
+                    onPressed: _showServiceCenters,
+                    mini: true,
+                    backgroundColor: Colors.indigo,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    // Material doesn't ship a single "truck repair" glyph,
+                    // so stack the truck under a small wrench badge to
+                    // convey "truck service" at a glance.
+                    child: const Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Icon(Icons.local_shipping, color: Colors.white, size: 22),
+                        Positioned(
+                          right: 0, bottom: 0,
+                          child: CircleAvatar(
+                            radius: 8,
+                            backgroundColor: Colors.white,
+                            child: Icon(Icons.build, color: Colors.indigo, size: 10),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Clear service-center markers — mirrors the right-side
+                  // clear FAB that appears when fuel stations are active.
+                  if (_serviceCenters != null) ...[
+                    const SizedBox(height: 12),
+                    FloatingActionButton(
+                      heroTag: 'clearServiceCentersBtn',
+                      onPressed: () => setState(() => _serviceCenters = null),
+                      mini: true,
+                      backgroundColor: Colors.redAccent,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.close, color: Colors.white),
                     ),
                   ],
-                ),
+                ],
               ),
             ),
 
