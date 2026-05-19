@@ -1602,11 +1602,12 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                   },
                   // Feed the server's live fuel plan (stops) into the map so
                   // the driver sees orange pump markers at each planned refuel,
-                  // not just the text card below. Hide them whenever EITHER
-                  // search mode (nearby pumps OR service centers) is active
-                  // so the map doesn't mix three sets of pins at once. They
-                  // come back the moment the relevant search is cleared.
-                  plannedFuelStops: (_fuelStations != null || _serviceCenters != null)
+                  // not just the text card below. Hide them only when the
+                  // service-center search is active — that's a non-fuel
+                  // context and the planned stops would just be noise.
+                  // During a manual "nearby pumps" search both layers stay
+                  // visible: yellow = user-found, orange = planned.
+                  plannedFuelStops: _serviceCenters != null
                       ? null
                       : (_dashboardData?['fuelPlan']?['stops'] as List?)
                           ?.whereType<Map<String, dynamic>>()
