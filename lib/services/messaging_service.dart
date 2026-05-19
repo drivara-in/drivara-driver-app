@@ -6,6 +6,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:dio/dio.dart';
 import '../api_config.dart';
 import 'notification_service.dart';
+import 'fuel_proximity_alert_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Handles Firebase Cloud Messaging lifecycle for the driver app:
 ///   - initializes Firebase Admin SDK against project `drivara-cc236`
@@ -61,6 +63,14 @@ class MessagingService {
     // NotificationService. FCM on Android doesn't display notifications
     // automatically when the app is in the foreground.
     FirebaseMessaging.onMessage.listen((RemoteMessage msg) {
+      // Fuel-proximity pushes carry `event: fuel_proximity` in their
+      // data payload — fire the chime + TTS announcement in addition
+      // to (not instead of) the visual notification so a driver who
+      // can't safely look at the screen still hears which pump's
+      // coming up.
+      if (msg.data['event'] == 'fuel_proximity') {
+        _handleFuelProximity(msg);
+      }
       final notif = msg.notification;
       if (notif == null) return;
       NotificationService().showNotification(
@@ -106,6 +116,30 @@ class MessagingService {
   /// Call after a successful driver login. Fetches the FCM token and POSTs
   /// it to the main server (which proxies to the notification service).
   /// No-ops silently if Firebase/FCM isn't available.
+  /// FCM payload for a fuel-proximity alert. Pulls the driver's locale
+  /// from SharedPreferences (same value LocalizationProvider sets) and
+  /// hands the message off to [FuelProximityAlertService] for chime +
+  /// TTS playback. Best-effort — any failure is swallowed so the
+  /// visual notification still goes through.
+  Future<void> _handleFuelProximity(RemoteMessage msg) async {
+    try {
+      final data = msg.data;
+      final distanceKm = num.tryParse(data['distanceKm']?.toString() ?? '') ?? 0;
+      final outletName = (data['outletName'] ?? 'Fuel Stop').toString();
+      final pricePerLiter = num.tryParse(data['pricePerLiter']?.toString() ?? '') ?? 0;
+      final prefs = await SharedPreferences.getInstance();
+      final locale = prefs.getString('language_code') ?? 'en';
+      await FuelProximityAlertService.instance.announce(
+        locale: locale,
+        distanceKm: distanceKm,
+        outletName: outletName,
+        pricePerLiter: pricePerLiter,
+      );
+    } catch (e) {
+      debugPrint('[messaging] fuel-proximity handler failed: $e');
+    }
+  }
+
   Future<void> registerAfterLogin() async {
     if (!_initialized) await init();
     if (!_initialized) return;
