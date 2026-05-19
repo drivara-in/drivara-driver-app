@@ -227,18 +227,42 @@ class _LiveJobMapState extends State<LiveJobMap> {
     if (encodedJobRoute != null && encodedJobRoute.isNotEmpty) {
       final pts = _decodePolyline(encodedJobRoute);
       if (pts.length >= 2) {
-        // Solid primary line, full opacity. Width 6 so it's clearly visible
-        // even when zoomed in following the truck. Override curve (when the
-        // driver taps a fuel chip) renders on top with white casing.
-        polylines.add(Polyline(
-          polylineId: const PolylineId('job-route'),
-          points: pts,
-          color: Theme.of(context).primaryColor,
-          width: 6,
-          jointType: JointType.round,
-          startCap: Cap.roundCap,
-          endCap: Cap.roundCap,
-        ));
+        // Two-tone route: blue = travelled so far, green = remaining /
+        // planned. We split the encoded polyline at the route point
+        // nearest to the truck's current position. Both segments render
+        // at the same width; when no telemetry is available yet the
+        // whole line draws green.
+        int cutIdx = -1;
+        if (vehiclePos != null) {
+          double bestD = double.infinity;
+          for (int i = 0; i < pts.length; i++) {
+            final dLat = pts[i].latitude - vehiclePos.latitude;
+            final dLng = pts[i].longitude - vehiclePos.longitude;
+            final d2 = dLat * dLat + dLng * dLng;
+            if (d2 < bestD) { bestD = d2; cutIdx = i; }
+          }
+        }
+        const blue = Color(0xFF1E88E5);   // travelled
+        const green = Color(0xFF22C55E);  // planned / remaining
+        if (cutIdx > 0) {
+          polylines.add(Polyline(
+            polylineId: const PolylineId('job-route-travelled'),
+            points: pts.sublist(0, cutIdx + 1),
+            color: blue, width: 6, jointType: JointType.round,
+            startCap: Cap.roundCap, endCap: Cap.roundCap,
+          ));
+        }
+        if (cutIdx < pts.length - 1) {
+          polylines.add(Polyline(
+            polylineId: const PolylineId('job-route-planned'),
+            // Start the green segment from the cut point so the two lines
+            // meet cleanly. When cutIdx == -1 (no vehicle telemetry yet)
+            // the whole polyline renders green.
+            points: pts.sublist(cutIdx < 0 ? 0 : cutIdx),
+            color: green, width: 6, jointType: JointType.round,
+            startCap: Cap.roundCap, endCap: Cap.roundCap,
+          ));
+        }
       }
     }
 
@@ -463,12 +487,15 @@ class _LiveJobMapState extends State<LiveJobMap> {
 
     final controller = await _controller.future;
     
-    // Driving Mode / Follow Mode
+    // Driving Mode / Follow Mode. Keep the camera north-up always —
+    // drivers found the rotating-with-heading view confusing because
+    // labels and street names flipped around. Tilt drops to 0 for a
+    // pure overhead view that matches the new fixed-north orientation.
     final cameraUpdate = CameraUpdate.newCameraPosition(CameraPosition(
       target: pos,
       zoom: 18.0,
-      tilt: 50.0,
-      bearing: heading,
+      tilt: 0.0,
+      bearing: 0.0,
     ));
 
     _isProgrammaticMove = true; // Mark as programmatic move
@@ -597,7 +624,10 @@ class _LiveJobMapState extends State<LiveJobMap> {
       myLocationButtonEnabled: false,
       mapToolbarEnabled: false,
       compassEnabled: false,
-      rotateGesturesEnabled: true,
+      // Disable rotation gestures — paired with bearing=0 in the
+      // follow camera so north stays up always. Drivers reported that
+      // rotation was disorienting compared with a fixed orientation.
+      rotateGesturesEnabled: false,
       tiltGesturesEnabled: true,
       trafficEnabled: false,
     );
