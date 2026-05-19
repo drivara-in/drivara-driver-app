@@ -1,6 +1,7 @@
 
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'login_page.dart';
@@ -21,6 +22,19 @@ import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Android 15 (API 35) enforces edge-to-edge by default and flags the
+  // legacy decor-fits-system-windows flow as deprecated. Opt the app in
+  // explicitly so the Play Console "edge-to-edge may not display"
+  // warning clears and Flutter's framework uses the modern WindowInsets
+  // path instead of View.SYSTEM_UI_FLAG_*. Status + nav bars also go
+  // transparent so the existing screens render to the edge cleanly.
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarContrastEnforced: false,
+  ));
 
   // Strict environment loading (Default: .env)
   const envFile = String.fromEnvironment('ENV_FILE', defaultValue: '.env');
