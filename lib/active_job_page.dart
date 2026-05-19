@@ -1582,43 +1582,19 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                     }
                   },
                   onFuelStationTap: (station) async {
-                    final state = _mapKey.currentState;
-                    if (state != null) {
-                       // 1. Optimistic Update
-                       (state as dynamic).updateDestination(
-                          LatLng(station['lat'], station['lng']),
-                          station['name']
-                       );
-                       
-                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                         content: Text("${Provider.of<LocalizationProvider>(context, listen: false).t('routing_to')} ${station['name']}..."), 
-                         duration: const Duration(seconds: 1)
-                       ));
-
-                       // 2. Directions
-                       try {
-                           final vLoc = vehicle['location'];
-                           if (vLoc != null) {
-                               final lat = _parseNum(vLoc['lat'])?.toDouble() ?? 0.0;
-                               final lng = _parseNum(vLoc['lng'])?.toDouble() ?? 0.0;
-                               final service = FindFuelService();
-                               final routePoints = await service.getDirections(
-                                   LatLng(lat, lng), 
-                                   LatLng(station['lat'], station['lng'])
-                               );
-                               if (routePoints.isNotEmpty) {
-                                   (state as dynamic).updateDestination(
-                                     LatLng(station['lat'], station['lng']),
-                                     station['name'],
-                                     routePoints: routePoints
-                                  );
-                              } else {
-                                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Provider.of<LocalizationProvider>(context, listen: false).t('no_road_route_found'))));
-                              }
-                           }
-                       } catch (e) {
-                          debugPrint("Error fetching route: $e");
-                       }
+                    // Hand off to Google Maps for turn-by-turn, same UX as
+                    // the service-centers sheet. The in-app destination
+                    // preview + directions fetch caused two issues drivers
+                    // complained about: it overwrote the trip's actual
+                    // route polyline on the live map, and gave only a
+                    // static line — not navigation.
+                    final lat = (station['lat'] as num?)?.toDouble();
+                    final lng = (station['lng'] as num?)?.toDouble();
+                    if (lat == null || lng == null) return;
+                    final uri = Uri.parse(
+                        'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving');
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
                     }
                   },
               ),
