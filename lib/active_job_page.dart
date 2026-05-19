@@ -36,6 +36,7 @@ import 'providers/theme_provider.dart';
 import 'services/job_stream_service.dart';
 import 'services/find_fuel_service.dart';
 import 'widgets/service_center_sheet.dart';
+import 'widgets/fuel_pump_sheet.dart';
 import 'services/notification_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
@@ -1305,52 +1306,38 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
     );
   }
 
-  void _showFuelOptions() async {
-      final vehicle = _dashboardData?['vehicle'] ?? {};
-      final loc = vehicle['location'];
-      
-      if (loc == null || loc['lat'] == 0 || loc['lng'] == 0) {
-         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Provider.of<LocalizationProvider>(context, listen: false).t('vehicle_location_unknown'))));
-         return;
-      }
-      
-      // Show loading indicator
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Provider.of<LocalizationProvider>(context, listen: false).t('searching_pumps')), duration: const Duration(milliseconds: 1500)));
+  /// Pops a bottom sheet listing the nearest petrol pumps for the
+  /// current vehicle location. Sheet handles its own loading state
+  /// and reports the result list back so the live map still renders
+  /// orange pump markers on top of the route. Mirrors the
+  /// service-centers sheet for consistency.
+  void _showFuelOptions() {
+    final vehicle = _dashboardData?['vehicle'] ?? const {};
+    final loc = vehicle['location'];
+    if (loc == null || (loc['lat'] ?? 0) == 0 || (loc['lng'] ?? 0) == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(Provider.of<LocalizationProvider>(context, listen: false)
+                .t('vehicle_location_unknown') ?? 'Vehicle location not available yet'),
+      ));
+      return;
+    }
+    final lat = (loc['lat'] is String) ? double.tryParse(loc['lat']) ?? 0 : (loc['lat'] as num).toDouble();
+    final lng = (loc['lng'] is String) ? double.tryParse(loc['lng']) ?? 0 : (loc['lng'] as num).toDouble();
+    final routePolyline = _job['route_path'] is String ? _job['route_path'] as String : null;
 
-      try {
-         final service = FindFuelService();
-         double lat = (loc['lat'] is String) ? double.tryParse(loc['lat']) ?? 0 : (loc['lat'] as num).toDouble();
-         double lng = (loc['lng'] is String) ? double.tryParse(loc['lng']) ?? 0 : (loc['lng'] as num).toDouble();
-         
-         String? routePolyline;
-         if (_job['route_path'] is String) {
-            routePolyline = _job['route_path'];
-         }
-
-         final pumps = await service.findNearbyIndianOil(LatLng(lat, lng), routePolyline: routePolyline);
-         
-         if (pumps.isEmpty) {
-            if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Provider.of<LocalizationProvider>(context, listen: false).t('no_pumps_found'))));
-            return;
-         }
-         
-         if (!mounted) return;
-
-         // Update Map Markers
-         setState(() {
-            _fuelStations = pumps;
-         });
-         
-         // Inform user
-         // Inform user
-         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-           content: Text("${Provider.of<LocalizationProvider>(context, listen: false).t('found_pumps')} (${pumps.length})"),
-           duration: const Duration(seconds: 4),
-         ));
-
-      } catch (e) {
-         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("${Provider.of<LocalizationProvider>(context, listen: false).t('error_searching_fuel')} $e"))); 
-      }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => FuelPumpSheet(
+        driverLocation: LatLng(lat, lng),
+        routePolyline: routePolyline,
+        onResultsReady: (pumps) {
+          if (!mounted) return;
+          setState(() => _fuelStations = pumps);
+        },
+      ),
+    );
   }
 
   void _showExpenseSheet() {
