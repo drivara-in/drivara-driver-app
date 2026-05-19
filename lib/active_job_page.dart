@@ -1602,10 +1602,14 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                   },
                   // Feed the server's live fuel plan (stops) into the map so
                   // the driver sees orange pump markers at each planned refuel,
-                  // not just the text card below.
-                  plannedFuelStops: (_dashboardData?['fuelPlan']?['stops'] as List?)
-                      ?.whereType<Map<String, dynamic>>()
-                      .toList(),
+                  // not just the text card below. Hide them while a user-
+                  // initiated "nearby pumps" search is active so the map
+                  // doesn't double up two sets of fuel pins at once.
+                  plannedFuelStops: _fuelStations != null
+                      ? null
+                      : (_dashboardData?['fuelPlan']?['stops'] as List?)
+                          ?.whereType<Map<String, dynamic>>()
+                          .toList(),
                   onPlannedFuelStopTap: (stop) {
                     final lat = (stop['lat'] as num?)?.toDouble();
                     final lng = (stop['lng'] as num?)?.toDouble();
@@ -1663,41 +1667,39 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
             // Left-side FAB column. Right column is full of action FABs;
             // the new "service centers" button lands on the left so it
             // doesn't push existing icons further down the screen.
+            // Left-side FAB: truck-repair search OR clear-service-centers
+            // button — they share the same slot, mirroring the right-side
+            // fuel/clear pattern. Only one shows at a time depending on
+            // whether _serviceCenters is populated.
             Positioned(
               left: 16,
               top: 130,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FloatingActionButton(
-                    heroTag: 'serviceCenterBtn',
-                    onPressed: _showServiceCenters,
-                    mini: true,
-                    backgroundColor: Colors.indigo,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    // Material doesn't ship a single "truck repair" glyph,
-                    // so stack the truck under a small wrench badge to
-                    // convey "truck service" at a glance.
-                    child: const Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Icon(Icons.local_shipping, color: Colors.white, size: 22),
-                        Positioned(
-                          right: 0, bottom: 0,
-                          child: CircleAvatar(
-                            radius: 8,
-                            backgroundColor: Colors.white,
-                            child: Icon(Icons.build, color: Colors.indigo, size: 10),
+              child: _serviceCenters == null
+                  ? FloatingActionButton(
+                      heroTag: 'serviceCenterBtn',
+                      onPressed: _showServiceCenters,
+                      mini: true,
+                      backgroundColor: Colors.indigo,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      // Material doesn't ship a single "truck repair" glyph,
+                      // so stack the truck under a small wrench badge to
+                      // convey "truck service" at a glance.
+                      child: const Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Icon(Icons.local_shipping, color: Colors.white, size: 22),
+                          Positioned(
+                            right: 0, bottom: 0,
+                            child: CircleAvatar(
+                              radius: 8,
+                              backgroundColor: Colors.white,
+                              child: Icon(Icons.build, color: Colors.indigo, size: 10),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Clear service-center markers — mirrors the right-side
-                  // clear FAB that appears when fuel stations are active.
-                  if (_serviceCenters != null) ...[
-                    const SizedBox(height: 12),
-                    FloatingActionButton(
+                        ],
+                      ),
+                    )
+                  : FloatingActionButton(
                       heroTag: 'clearServiceCentersBtn',
                       onPressed: () => setState(() => _serviceCenters = null),
                       mini: true,
@@ -1705,9 +1707,6 @@ class _ActiveJobPageState extends State<ActiveJobPage> with WidgetsBindingObserv
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       child: const Icon(Icons.close, color: Colors.white),
                     ),
-                  ],
-                ],
-              ),
             ),
 
             Positioned(
